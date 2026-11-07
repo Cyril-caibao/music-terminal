@@ -97,8 +97,8 @@ npm run pack              # 生成 ../electron-dist/WebTerm-Electron-win32-x64/
 `web/` 内随项目分发的 `xterm.min.js` / `addon-fit.min.js` / `three.r128.min.js`
 以及 `folia-adapter.js`（PixiJS 相关打包产物）各自遵循原项目许可证；
 后端依赖 `pywinpty`，桌面壳依赖 Electron。
-**本仓库尚未指定 LICENSE**：公开发布前请自行选择许可证并补上 `LICENSE` 文件，
-同时核对上述第三方库的许可条款。
+**本仓库以 [MIT License](../../LICENSE) 发布**：根目录已包含 `LICENSE` 文件；随项目分发的第三方库
+（xterm.js、three.js、PixiJS、pywinpty、Electron 等）各自遵循其原许可证，使用前请核对上述第三方库的许可条款。
 
 ## 与本地工作副本的差异
 
