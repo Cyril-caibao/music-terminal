@@ -1,0 +1,39 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# ===== 构建产物 / 打包输出 =====
+build/
+dist/
+electron-dist/
+*.exe
+*.asar
+*.zip
+*.log
+
+# ===== 本机敏感配置（绝不入库） =====
+Settings.json
+users.json
+*.local.json
+
+# ===== Electron / Node =====
+node_modules/
+electron-tools/
+
+# ===== AI 模型（不随仓库分发） =====
+llama/
+llama/models/
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ===== 临时探针 / 备份 =====
+_*/
+_backup/
+_cdp2/
+* - 副本.*
