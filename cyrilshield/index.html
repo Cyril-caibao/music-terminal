@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyrilShield</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">🛡</span>
+    <b>CyrilShield</b>
+    <span class="ver" id="ver">—</span>
+  </div>
+  <div class="tags">
+    <span class="tag" id="tagTools" title="Android 工具链">检测中…</span>
+    <span class="tag" id="tagUpx" title="UPX">UPX</span>
+    <span class="tag" id="tagVm" title="VM 虚拟壳后端">VM</span>
+  </div>
+</header>
+
+<main>
+  <section class="left">
+    <div class="drop" id="drop">
+      <input type="file" id="file" hidden>
+      <div class="drop-in" id="dropin">
+        <div class="drop-ico">⊕</div>
+        <div class="drop-t">把 EXE / APK 拖进来</div>
+        <div class="drop-s">或点击选择文件</div>
+      </div>
+      <div class="filecard" id="filecard" hidden>
+        <div class="frow">
+          <span class="fico" id="fico">▣</span>
+          <div class="fmain">
+            <div class="fname" id="fname"></div>
+            <div class="fmeta" id="fmeta"></div>
+          </div>
+          <button class="mini" id="pick">换一个</button>
+        </div>
+        <div class="bar" id="bar" hidden><i id="barIn"></i></div>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button data-tool="icon" class="on">图标</button>
+      <button data-tool="upx">UPX</button>
+      <button data-tool="vm">VM 壳</button>
+      <button data-tool="apk">APK</button>
+    </div>
+
+    <div class="opts" id="opts"></div>
+
+    <div class="runbar">
+      <button class="primary" id="go" disabled>开始</button>
+      <span class="hint" id="hint">先选一个文件</span>
+    </div>
+  </section>
+
+  <section class="right">
+    <div class="panel-h">
+      <b>日志</b>
+      <div class="ph-r">
+        <span class="clock" id="clock"></span>
+        <button class="mini" id="clearLog">清空</button>
+      </div>
+    </div>
+    <pre class="log" id="log"></pre>
+    <div class="result" id="result" hidden>
+      <div class="rline">
+        <span class="rlabel" id="rlabel">完成</span>
+        <span class="rpath" id="rpath"></span>
+      </div>
+      <div class="racts">
+        <button class="mini" id="openDir">打开目录</button>
+        <button class="mini" id="download">下载</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
