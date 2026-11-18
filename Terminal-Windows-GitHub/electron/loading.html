@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>WebTerm</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  /* 无边框窗口：主进程 frame:false + transparent:true，四角由 body 自己裁圆，
+     圆外区域透出桌面（Mineradio 同款）。浏览器里直接打开时是纯深底。 */
+  /* 不能只写 background:transparent —— 那会让 Chromium 把 body 的
+     radial-gradient 提升成 canvas 背景铺满视口，body 的 clip-path 裁不到它，
+     四角就一直是方角。给 html 一个「非 none 但全透明」的 background-image，
+     按 CSS 2.1 §14.2 打断背景传播，圆角才真的透出桌面（Mineradio 同款规避）。 */
+  html { background-color: transparent;
+         background-image: linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0));
+         background-repeat: no-repeat;
+         border-radius: 34px;
+         clip-path: inset(0 round 34px);
+         -webkit-clip-path: inset(0 round 34px); }
+  body {
+    border-radius: 34px;
+    overflow: hidden;
+    clip-path: inset(0 round 34px);
+    -webkit-clip-path: inset(0 round 34px);
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% 42%, #0d201b 0%, #07110e 58%, #040b09 100%);
+    color: #9cffdf;
+    font: 13px/1.8 "Segoe UI", "Microsoft YaHei", sans-serif;
+    letter-spacing: 2px; user-select: none;
+  }
+  /* 窗口态圆角常驻；只有真全屏才由 .cyril-fullscreen 摘掉（见下）。 */
+  /* 一圈看得见的圆角边缘，和主界面 #cyrilFrame 同一套 */
+  #cyrilFrame { position: fixed; inset: 0; z-index: 2147482999;
+    border-radius: 34px; pointer-events: none;
+    border: 1px solid rgba(156,255,223,.16);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05),
+                inset 0 0 26px rgba(0,0,0,.28),
+                0 0 0 1px rgba(0,0,0,.35); }
+  /* 真全屏：四角铺满整块屏幕。Mineradio public/app.css 对 .desktop-fullscreen
+     也是 border-radius:0 + clip-path:none + box-shadow:none。 */
+  html.cyril-fullscreen, html.cyril-fullscreen body {
+    border-radius: 0 !important; clip-path: none !important;
+    -webkit-clip-path: none !important; box-shadow: none !important; }
+  html.cyril-fullscreen #cyrilFrame { display: none !important; }
+  html.cyril-resizing, html.cyril-resizing * {
+    cursor: var(--cy-resize-cursor, ew-resize) !important; }
+
+  /* 自绘标题栏：拖动区 + 右上窗口按钮（启动页自带一套，主界面由 preload 注入）。
+     拖动走 __cyrilDesktop 的 IPC，不用 -webkit-app-region（透明窗口下不生效）。 */
+  #cyrilWinBar { position: fixed; left: 0; right: 0; top: 0; height: 44px;
+    z-index: 2147483000; pointer-events: none; }
+  #cyrilWinBar .cy-drag-top { position: absolute; left: 0; right: 0; top: 0; height: 9px;
+    pointer-events: auto; }
+  #cyrilWinBar .cy-drag-left { position: absolute; left: 0; top: 0; width: 168px; height: 44px;
+    pointer-events: auto; }
+  #cyrilWinBar .cy-mark { position: absolute; left: 20px; top: 13px; font-size: 11px;
+    letter-spacing: .16em; color: rgba(156,255,223,.55); pointer-events: none; }
+  #cyrilWinBar .cy-btns { position: absolute; right: 14px; top: 8px; display: flex; gap: 6px;
+    pointer-events: auto; }
+  #cyrilWinBar button { width: 38px; height: 30px; padding: 0; border: 0; border-radius: 10px;
+    background: rgba(4,8,10,.42); color: rgba(224,250,255,.72); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .18s, color .18s, transform .18s; }
+  #cyrilWinBar button svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.7;
+    fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  #cyrilWinBar button:hover { background: rgba(244,210,138,.16); color: #fff1bd; transform: translateY(-1px); }
+  #cyrilWinBar button.cy-close:hover { background: rgba(255,86,100,.86); color: #fff; }
+
+  .box { text-align: center; padding: 0 24px; }
+  .logo { width: min(520px, 66vw); height: auto; display: block; margin: 0 auto 6px;
+    filter: drop-shadow(0 8px 34px rgba(0,245,212,.20)); }
+  .txt { font-size: 14px; letter-spacing: 3px; }
+  .bar { width: 180px; height: 2px; margin: 14px auto 0; border-radius: 2px;
+    background: rgba(156,255,223,.15); overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; background: #9cffdf;
+    animation: run 1.2s ease-in-out infinite; }
+  @keyframes run { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+  small { display: block; margin-top: 10px; color: rgba(156,255,223,.45); letter-spacing: 0; }
+</style>
+</head>
+<body>
+  <div id="cyrilFrame"></div>
+  <div id="cyrilWinBar">
+    <div class="cy-drag-top"></div>
+    <div class="cy-drag-left"></div>
+    <span class="cy-mark">WEBTERM</span>
+    <div class="cy-btns">
+      <button type="button" data-act="min" title="最小化" aria-label="最小化"><svg viewBox="0 0 14 14"><path d="M2.5 7h9"/></svg></button>
+      <button type="button" data-act="max" title="最大化" aria-label="最大化"><svg viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1.2"/></svg></button>
+      <button type="button" data-act="close" class="cy-close" title="关闭" aria-label="关闭"><svg viewBox="0 0 14 14"><path d="M3.2 3.2l7.6 7.6M10.8 3.2l-7.6 7.6"/></svg></button>
+    </div>
+  </div>
+
+  <div class="box">
+    <img class="logo" src="cyril-splash.png" alt="Cyril">
+    <div class="txt">WebTerm 正在启动本地服务…</div>
+    <div class="bar"><i></i></div>
+    <small>首次启动需要解压运行时，请稍候</small>
+  </div>
+
+<script>
+(function () {
+  var api = window.__cyrilDesktop;
+  var bar = document.getElementById('cyrilWinBar');
+  var btns = bar.querySelector('.cy-btns');
+  if (!api) {                       /* 浏览器里单独打开启动页：不显示无效按钮 */
+    btns.style.display = 'none';
+    return;
+  }
+  var MAX = '<svg viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1.2"/></svg>';
+  var RESTORE = '<svg viewBox="0 0 14 14"><path d="M4.5 4.5h7v7"/><rect x="2.5" y="2.5" width="7" height="7" rx="1.2"/></svg>';
+  function state(maxed) {
+    document.body.classList.toggle('cyril-maximized', !!maxed);
+    var b = btns.querySelector('[data-act="max"]');
+    if (b) { b.innerHTML = maxed ? RESTORE : MAX; b.title = maxed ? '还原' : '最大化'; }
+  }
+  /* 只有真全屏才摘圆角；窗口态启动页也保持 34px 圆角 */
+  var isFull = false;
+  function fsState(full) {
+    isFull = !!full;
+    document.documentElement.classList.toggle('cyril-fullscreen', isFull);
+    document.body.classList.toggle('cyril-fullscreen', isFull);
+    if (isFull) document.documentElement.classList.remove('cyril-resizing');
+  }
+  btns.addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('button[data-act]') : null;
+    if (!b) return;
+    var act = b.getAttribute('data-act');
+    if (act === 'min') api.minimize();
+    else if (act === 'max') api.toggleMaximize();
+    else if (act === 'close') api.close();
+  });
+  [bar.querySelector('.cy-drag-top'), bar.querySelector('.cy-drag-left')].forEach(function (el) {
+    el.addEventListener('dblclick', function () { api.toggleMaximize(); });
+  });
+  /* 拖动 + 缩放（与主界面 preload 同一套 IPC）：顶栏 / 四周 28px 可拖，
+     左/右/下边 9px 与底部两角 26px 优先判为缩放。全屏时缩放关闭。 */
+  var CURSOR = { w:'ew-resize', e:'ew-resize', s:'ns-resize', sw:'nesw-resize', se:'nwse-resize' };
+  function hitResize(t, x, y) {
+    if (isFull || (t && t.closest && t.closest('button'))) return null;
+    var w = innerWidth, h = innerHeight;
+    if (y <= 44 || y >= h) return null;
+    if (y >= h - 26 && x >= w - 26) return 'se';
+    if (y >= h - 26 && x <= 26) return 'sw';
+    if (y >= h - 9) return 's';
+    if (x >= w - 9) return 'e';
+    if (x <= 9) return 'w';
+    return null;
+  }
+  function cursor(dir) {
+    var root = document.documentElement;
+    root.classList.toggle('cyril-resizing', !!dir);
+    if (dir) root.style.setProperty('--cy-resize-cursor', CURSOR[dir] || 'ew-resize');
+  }
+  function dragArea(t, x, y) {
+    if (!t || !t.closest) return false;
+    if (t.closest('button')) return false;
+    if (t.closest('#cyrilWinBar')) return true;
+    return x <= 28 || x >= innerWidth - 28 || y <= 28 || y >= innerHeight - 28;
+  }
+  var dragging = false, resizing = false;
+  document.addEventListener('pointermove', function (ev) {
+    if (dragging || resizing) return;
+    cursor(hitResize(ev.target, ev.clientX, ev.clientY));
+  }, { capture: true, passive: true });
+  document.addEventListener('pointerdown', function (ev) {
+    if (ev.button !== 0 || dragging || resizing) return;
+    var dir = hitResize(ev.target, ev.clientX, ev.clientY);
+    if (dir) { resizing = true; cursor(null); api.resizeStart(dir); return; }
+    if (!dragArea(ev.target, ev.clientX, ev.clientY)) return;
+    dragging = true; api.dragStart();
+  }, { capture: true, passive: true });
+  function dragEnd() {
+    if (dragging) { dragging = false; api.dragEnd(); }
+    if (resizing) { resizing = false; api.resizeEnd(); }
+  }
+  addEventListener('pointerup', dragEnd);
+  addEventListener('pointercancel', dragEnd);
+  addEventListener('blur', dragEnd);
+  if (api.onWindowState) api.onWindowState(state);
+  if (api.isMaximized) api.isMaximized().then(state).catch(function () {});
+  if (api.onFullscreenState) api.onFullscreenState(fsState);
+  if (api.isFullscreen) api.isFullscreen().then(fsState).catch(function () {});
+})();
+</script>
+</body>
+</html>

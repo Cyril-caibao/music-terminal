@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "theme": "dark",
+  "bg_level": 0,
+  "bg_kind": "",
+  "bg_source": "builtin",
+  "tree_width": 280,
+  "tree_open": false,
+  "panels": {},
+  "ai": {},
+  "components": {
+    "audio": false,
+    "sys": false
+  },
+  "fx": {
+    "wet": 0,
+    "damp": 45,
+    "room": 35,
+    "gain": 100,
+    "pre": 20,
+    "sur": 0
+  },
+  "port": 8765,
+  "remote": false,
+  "link_bars": true,
+  "cursor": {
+    "hide": false,
+    "delay": 3
+  },
+  "terminal": {
+    "font_family": "Consolas, \"Microsoft YaHei\", \"Courier New\", monospace",
+    "font_size": 15,
+    "line_height": 1.0
+  }
+}

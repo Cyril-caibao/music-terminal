@@ -1,0 +1,11 @@
+{
+  "name": "webterm-electron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebTerm desktop shell: frameless Electron window + local Python backend",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-packager . WebTerm-Electron --platform=win32 --arch=x64 --out=../electron-dist --overwrite --extra-resource=../dist/WebTerm.exe --electron-version=45.2.3"
+  }
+}
