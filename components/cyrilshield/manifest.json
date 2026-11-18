@@ -1,0 +1,11 @@
+{
+  "name": "CyrilShield",
+  "desc": "EXE / APK 保护：图标提取与替换 · UPX 压缩 · VM 虚拟壳 · ELF 加固 · APK 加固",
+  "version": "1.4.2",
+  "author": "Cyril",
+  "kind": "panel",
+  "entry": "index.html",
+  "panel_width": 1080,
+  "panel_height": 720,
+  "icon": "🛡"
+}

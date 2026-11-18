@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>音乐</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <select id="platform" title="搜索平台"></select>
+    <div class="search">
+      <input id="kw" type="text" placeholder="搜索歌曲 / 歌手 / 专辑，回车开始" autocomplete="off">
+      <button id="btnSearch" class="primary">搜索</button>
+    </div>
+    <button id="btnSource" class="ghost">音源</button>
+    <button id="btnSetting" class="ghost">设置</button>
+  </header>
+
+  <div class="hintbar">
+    <span id="srcNow">未加载音源</span>
+    <span class="spacer"></span>
+    <span id="pageInfo"></span>
+    <button id="btnPrevPage" class="mini" disabled>上一页</button>
+    <button id="btnNextPage" class="mini" disabled>下一页</button>
+  </div>
+
+  <main id="listWrap">
+    <div class="thead">
+      <span class="c-idx">#</span>
+      <span class="c-name">歌曲</span>
+      <span class="c-singer">歌手</span>
+      <span class="c-album">专辑</span>
+      <span class="c-time">时长</span>
+      <span class="c-act">操作</span>
+    </div>
+    <div id="list"></div>
+    <div id="empty" class="empty">先导入音源，再搜索</div>
+  </main>
+
+  <footer class="player">
+    <div class="cover-wrap"><img id="cover" alt=""><span id="coverFallback">♪</span></div>
+    <div class="meta">
+      <div id="tTitle">未播放</div>
+      <div id="tSub"></div>
+    </div>
+    <div class="ctrl">
+      <button id="btnPrev" title="上一首">⏮</button>
+      <button id="btnPlay" class="play" title="播放/暂停">▶</button>
+      <button id="btnNext" title="下一首">⏭</button>
+    </div>
+    <div class="prog">
+      <span id="cur">0:00</span>
+      <input type="range" id="seek" min="0" max="1000" value="0">
+      <span id="dur">0:00</span>
+    </div>
+    <input type="range" id="vol" min="0" max="100" value="80" class="vol" title="音量">
+    <button id="btnDl" title="下载当前歌曲">⬇</button>
+  </footer>
+</div>
+
+<!-- 音源抽屉 -->
+<div id="srcPanel" class="drawer">
+  <div class="drawer-head">
+    <span>音源</span>
+    <button class="x" data-close="srcPanel">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="sec-title">已导入</div>
+    <div id="srcList" class="src-list"></div>
+    <div class="sec-title">导入新音源</div>
+    <div class="row">
+      <input type="file" id="srcFile" accept=".js,text/javascript">
+      <span class="muted">选择 .js 音源文件</span>
+    </div>
+    <textarea id="srcCode" rows="6" placeholder="或直接把音源 JS 代码粘贴到这里"></textarea>
+    <div class="row">
+      <input type="text" id="srcUrl" placeholder="也可以填音源直链（https://...js）">
+      <button id="btnSrcUrl" class="mini">下载导入</button>
+    </div>
+    <div class="row end">
+      <span id="srcMsg" class="muted"></span>
+      <button id="btnSrcSave" class="primary">导入粘贴的代码</button>
+    </div>
+    <div class="row pathrow">
+      <div id="srcDir" class="path"></div>
+      <button id="btnOpenSrcDir" class="mini" title="在资源管理器里打开音源目录">打开</button>
+    </div>
+  </div>
+</div>
+
+<!-- 设置抽屉 -->
+<div id="setPanel" class="drawer">
+  <div class="drawer-head">
+    <span>设置</span>
+    <button class="x" data-close="setPanel">✕</button>
+  </div>
+  <div class="drawer-body">
+    <label class="field">
+      <span>默认音质</span>
+      <select id="cfgQuality">
+        <option value="flac24bit">无损 24bit</option>
+        <option value="flac">无损</option>
+        <option value="320k">320K</option>
+        <option value="192k">192K</option>
+        <option value="128k">128K</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>文件命名</span>
+      <input type="text" id="cfgNameFmt" placeholder="{name} - {singer}">
+    </label>
+    <div class="field-col">
+      <label class="check"><input type="checkbox" id="cfgSaveLrc"> 另存 .lrc 歌词文件</label>
+      <label class="check"><input type="checkbox" id="cfgEmbedLrc"> 内嵌歌词到音频标签</label>
+      <label class="check"><input type="checkbox" id="cfgEmbedCover"> 内嵌封面到音频标签</label>
+    </div>
+    <label class="field">
+      <span>歌词编码</span>
+      <select id="cfgLrcFmt">
+        <option value="utf8">UTF-8（带 BOM）</option>
+        <option value="gbk">GBK（带 BOM）</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>下载目录</span>
+      <input type="text" id="cfgDlDir" placeholder="留空 = 音乐目录/CyrilMusic">
+    </label>
+    <div class="row end">
+      <span id="setMsg" class="muted"></span>
+      <button id="btnOpenDir" class="mini">打开目录</button>
+      <button id="btnSetSave" class="primary">保存</button>
+    </div>
+    <div class="tip">
+      下载会保存原始音频，并把歌名 / 歌手 / 专辑写入标签；开启上两项后还会内嵌歌词与封面（mp3 / flac / m4a）。
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<audio id="audio" crossorigin="anonymous"></audio>
+<iframe id="sb" src="sandbox.html" style="display:none"></iframe>
+
+<script src="sdk.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

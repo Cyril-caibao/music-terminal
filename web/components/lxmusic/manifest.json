@@ -1,0 +1,11 @@
+{
+  "name": "音乐",
+  "desc": "导入音源搜索 / 试听 / 下载，内嵌歌词与封面",
+  "version": "1.0.0",
+  "author": "Cyril",
+  "kind": "panel",
+  "entry": "index.html",
+  "panel_width": 960,
+  "panel_height": 660,
+  "icon": "♪"
+}

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "start_page": "super",
+  "super_nodes": {
+    "core": [
+      45.13888888888889,
+      54.44444444444444
+    ],
+    "music": [
+      32.33289930555556,
+      38
+    ],
+    "file": [
+      76,
+      28
+    ],
+    "comp": [
+      24,
+      72
+    ],
+    "settings": [
+      76,
+      72
+    ]
+  },
+  "theme": "light",
+  "bg_level": 0,
+  "bg_kind": "builtin-light",
+  "bg_source": "lumiere",
+  "tree_width": 280,
+  "tree_open": true,
+  "panels": {
+    "cw-mtrack": {
+      "x": 32,
+      "y": 48
+    },
+    "compPanel": {
+      "x": 61,
+      "y": 108
+    },
+    "cw-lxmusic": {
+      "x": 179,
+      "y": 51
+    }
+  },
+  "ai": {
+    "enabled": false,
+    "base_url": "",
+    "api_key": "",
+    "model": "",
+    "temperature": 0.7,
+    "max_tokens": 1500
+  },
+  "components": {
+    "audio": false,
+    "sys": false
+  },
+  "fx": {
+    "wet": 0,
+    "damp": 45,
+    "room": 35,
+    "gain": 100,
+    "pre": 20,
+    "sur": 0
+  },
+  "port": 8765,
+  "remote": false,
+  "link_bars": false,
+  "cursor": {
+    "hide": false,
+    "delay": 3
+  },
+  "terminal": {
+    "font_family": "Consolas, \"Microsoft YaHei\", \"Courier New\", monospace",
+    "font_size": 15,
+    "line_height": 1.0
+  }
+}

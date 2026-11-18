@@ -1,0 +1,2 @@
+f6244077e02e6d84383416a82a903f4c929f2cf3e7a98c2b456a3ecadc050ff4 *WebTerm-Electron-Setup-1.0.6.exe
+3aab2301bbd95d13cbcb5f814e116270edd371ad938c6a9a44caaad39f78b6a5 *WebTerm-1.0.6-full.nupkg

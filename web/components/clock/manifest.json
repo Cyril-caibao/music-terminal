@@ -1,0 +1,11 @@
+{
+  "id": "clock",
+  "name": "时钟",
+  "desc": "本地时间 + 日期星期",
+  "version": "1.0",
+  "author": "Cyril",
+  "script": "index.js",
+  "style": "index.css",
+  "width": 52,
+  "height": 0
+}

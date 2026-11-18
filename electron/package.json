@@ -1,0 +1,11 @@
+{
+  "name": "webterm-electron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebTerm desktop shell: Electron window + bundled local WebTerm backend",
+  "main": "main.js",
+  "scripts": {
+    "start": "node ../electron-tools/node_modules/electron/cli.js .",
+    "pack": "node ../electron-tools/node_modules/@electron/packager/bin/electron-packager.mjs . WebTerm-Electron --platform=win32 --arch=x64 --out=../electron-dist --overwrite --extra-resource=../dist/WebTerm.exe --icon=../electron-tools/assets/app.ico --electron-zip-dir=../electron-tools/vendor --electron-version=45.2.3"
+  }
+}

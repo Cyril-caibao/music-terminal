@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyrilShield</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#111a2b; --fg:#e7eefb; --dim:#8b9cb8;
+    --line:rgba(122,162,255,.18); --accent:#3b82f6; --danger:#ff8f8f;
+  }
+  body.light{
+    --bg:#f3f6fc; --card:#ffffff; --fg:#17233a; --dim:#5d6b83;
+    --line:rgba(28,58,116,.16); --accent:#2563eb; --danger:#c02626;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--fg); font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    display:flex; align-items:center; justify-content:center; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:min(420px,86vw); text-align:center; padding:26px 24px 22px}
+  .logo{
+    width:64px;height:64px;margin:0 auto 14px;border-radius:16px;background:#fff;
+    display:flex;align-items:center;justify-content:center;padding:9px;
+    box-shadow:0 10px 26px rgba(37,99,235,.35);
+  }
+  .logo img{width:100%;height:100%;object-fit:contain;display:block}
+  h1{margin:0;font-size:19px;letter-spacing:.3px;font-weight:650}
+  .sub{margin:2px 0 18px;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--dim)}
+  #tip{margin:0 0 14px;color:var(--dim);min-height:22px}
+  .bar{height:3px;border-radius:3px;background:var(--line);overflow:hidden;margin:0 0 18px}
+  .bar i{display:block;height:100%;width:38%;border-radius:3px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    animation:run 1.15s linear infinite}
+  @keyframes run{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+  .bar[hidden]{display:none}
+  pre#err{
+    margin:0 0 14px;padding:10px 12px;text-align:left;max-height:190px;overflow:auto;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    color:var(--danger);font:12px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all
+  }
+  pre#err[hidden]{display:none}
+  .row{display:flex;gap:9px;justify-content:center}
+  .row[hidden]{display:none}
+  button{
+    appearance:none;border:1px solid var(--line);background:var(--card);color:var(--fg);
+    padding:7px 15px;border-radius:9px;font:inherit;cursor:pointer;transition:.15s
+  }
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.08);color:#fff}
+  .foot{margin-top:16px;font-size:11px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo"><img alt="CyrilShield" src="data:image/png;base64,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"></div>
+  <h1>CyrilShield</h1>
+  <div class="sub">Toolkit</div>
+
+  <p id="tip">正在启动内核…</p>
+  <div class="bar"><i></i></div>
+  <pre id="err" hidden></pre>
+  <div class="row" id="acts" hidden>
+    <button class="primary" id="retry">重试</button>
+    <button id="log">看日志</button>
+    <button id="stop">结束进程</button>
+  </div>
+  <div class="foot">界面由插件自带的 Python 运行，关了面板会自动退出</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var tip = document.getElementById("tip");
+  var bar = document.querySelector(".bar");
+  var errEl = document.getElementById("err");
+  var acts = document.getElementById("acts");
+
+  /* 跟随宿主明暗 */
+  function theme() {
+    try {
+      var l = !!(window.parent && window.parent.document &&
+                 window.parent.document.body.classList.contains("light"));
+      document.body.classList.toggle("light", l);
+    } catch (e) { /* 跨域就保持自己的主题 */ }
+  }
+  theme();
+  setInterval(theme, 2000);
+
+  function show(text, detail) {
+    tip.textContent = text;
+    bar.hidden = true;
+    acts.hidden = false;
+    if (detail) { errEl.textContent = detail; errEl.hidden = false; }
+  }
+
+  function post(url, body, ms) {
+    var ctl = ("AbortController" in window) ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, ms || 60000) : 0;
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (timer) clearTimeout(timer);
+      return d;
+    });
+  }
+
+  function boot() {
+    tip.textContent = "正在启动内核…";
+    bar.hidden = false;
+    errEl.hidden = true;
+    acts.hidden = true;
+    post("/cs/ui/start", {}, 60000).then(function (d) {
+      if (!d || !d.ok) {
+        show("启动失败", (d && d.error ? d.error + "\n\n" : "") + (d && d.log ? d.log : ""));
+        return;
+      }
+      tip.textContent = "正在进入界面…";
+      setTimeout(function () { location.replace(d.url); }, 200);
+    }).catch(function (e) {
+      show("请求失败：" + (e && e.message ? e.message : e));
+    });
+  }
+
+  document.getElementById("retry").onclick = boot;
+
+  document.getElementById("log").onclick = function () {
+    fetch("/cs/ui/log").then(function (r) { return r.json(); }).then(function (d) {
+      errEl.textContent = (d && d.log) ? d.log : "（还没有日志）";
+      errEl.hidden = false;
+    }).catch(function (e) {
+      errEl.textContent = "读日志失败：" + e.message;
+      errEl.hidden = false;
+    });
+  };
+
+  document.getElementById("stop").onclick = function () {
+    post("/cs/ui/stop", {}).then(function () {
+      show("已停止，点「重试」可以重新启动");
+    }).catch(function () { show("已停止"); });
+  };
+
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Cyril · Windows 网页终端</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="xterm.min.css">
+<style>
+  :root {
+    --kali-bg: #141414;
+    --kali-panel: #1e1e1e;
+    --kali-border: #3a3a3a;
+    --kali-green: #73d216;
+    --kali-fg: #d3d7cf;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background-color: var(--kali-bg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: var(--kali-fg);
+    font-family: "DejaVu Sans Mono", "Noto Sans Mono CJK SC", Menlo, Consolas, monospace;
+    display: flex; flex-direction: column;
+    height: 100vh; overflow: hidden;
+  }
+  /* 白色主题：整站配色随 body.light 切换 */
+  body.light {
+    --kali-bg: #f5f5f4;
+    --kali-panel: #ffffff;
+    --kali-border: #d0d0cf;
+    --kali-green: #3465a4;
+    --kali-fg: #2e3436;
+  }
+  #jserror {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0;
+    background: #5a0a0a; color: #ffd7d7;
+    padding: 6px 12px; font-size: 12px; z-index: 999;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  /* 视频壁纸：固定铺满、静音循环播放 */
+  #bgVideo {
+    position: fixed; inset: 0; z-index: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+  /* 背景遮罩层（白罩）：z-index:0，位于背景（图片/视频）之上、
+     终端文字之下（main z-index:1 / header、footer z-index:2）。
+     只调背景明暗，不改变文字渲染。 */
+  #bgOverlay {
+    position: fixed; inset: 0; z-index: 0;
+    display: none;
+    background: transparent;
+  }
+  header {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px;
+    background: var(--kali-panel);
+    border-bottom: 1px solid var(--kali-border);
+    font-size: 13px;
+    user-select: none;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .dot.r { background: #e74c3c; }
+  .dot.y { background: #f1c40f; }
+  .dot.g { background: #2ecc71; }
+  .title { color: var(--kali-green); font-weight: bold; letter-spacing: 1px; }
+  .subtitle { color: #888; font-size: 12px; }
+  .controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .btn {
+    background: var(--kali-panel);
+    color: var(--kali-fg);
+    border: 1px solid var(--kali-border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--kali-green); color: var(--kali-green); }
+  .btn.active { background: var(--kali-green); color: #141414; border-color: var(--kali-green); font-weight: bold; }
+  body.light .btn.active { color: #ffffff; }
+  /* 「外观」下拉面板：主题 + 白罩滑块 */
+  #appearancePanel {
+    position: absolute; top: 100%; right: 0; z-index: 6;
+    display: none;
+    background: var(--kali-panel);
+    border: 1px solid var(--kali-border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+    min-width: 210px;
+  }
+  #appearancePanel .panel-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+  }
+  #appearancePanel .panel-row:last-child { margin-bottom: 0; }
+  /* 「背景 ▸」子菜单：图片… / 视频… */
+  #bgSubmenu {
+    display: none;
+    margin-bottom: 8px;
+    padding: 6px;
+    background: rgba(127,127,127,0.12);
+    border: 1px solid var(--kali-border);
+    border-radius: 4px;
+  }
+  #bgSubmenu .btn { margin-right: 6px; }
+  #bgSubmenu .btn:last-child { margin-right: 0; }
+  /* 白罩透明度滑块 */
+  .ctrl-label { font-size: 12px; color: #888; }
+  #whiteOverlay {
+    flex: 1; min-width: 0; height: 4px;
+    -webkit-appearance: none; appearance: none;
+    background: var(--kali-border); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  #whiteOverlay::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--kali-green); border: 1px solid var(--kali-border);
+  }
+  #whiteOverlay::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--kali-green); border: 1px solid var(--kali-border);
+  }
+  #status {
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--kali-border);
+  }
+  #status.conn { color: var(--kali-green); border-color: var(--kali-green); }
+  #status.disconn { color: var(--kali-red, #ef2929); border-color: #ef2929; }
+  main { position: relative; z-index: 1; flex: 1; padding: 6px; min-height: 0; }
+  #terminal { height: 100%; width: 100%; touch-action: none; }
+  footer {
+    position: relative; z-index: 2;
+    padding: 6px 14px; font-size: 11px; color: #666;
+    border-top: 1px solid var(--kali-border);
+    background: var(--kali-panel);
+  }
+  footer b { color: var(--kali-green); }
+
+  /* ================= Mineradio · 银河电台背景 =================
+     移植自 oirge/Mineradio（GPL-3.0）：星轨粒子“银河”效果
+     配色沿用仓库默认色：primary #d6f8ff / secondary #9cffdf / highlight #fff0b8
+     银河只是背景层；终端保持可见可操作（透明透出），电台控件为浮层 */
+  #radio {
+    position: fixed; inset: 0; z-index: 0;
+    display: none;
+    pointer-events: none;          /* 背景不拦截终端输入 */
+  }
+  #radio.show { display: block; }
+  #galaxy-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+  }
+  /* 绘光（Folia Lumiere 移植）：舞台光背景层，与银河互斥显示 */
+  #lumiere-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: none;
+  }
+  body.lumiere-on #galaxy-canvas { display: none; }
+  body.lumiere-on #lumiere-canvas { display: block; }
+  /* 绘光 · 歌词被光束点亮：面板更透明透出光束，未唱行暖暗，当前行金色发光 */
+  body.lumiere-on #radio-lyrics {
+    background: rgba(8,4,12,0.28);
+    border-color: rgba(255,205,140,0.20);
+  }
+  body.lumiere-on #radio-lyrics-body .l-line { color: #8a6f55; }
+  body.lumiere-on #radio-lyrics-body .l-line.active {
+    color: #fff3cf;
+    text-shadow: 0 0 10px rgba(255,215,140,0.9), 0 0 26px rgba(255,170,80,0.5);
+  }
+  /* 浮层恢复可交互（pointer-events 会继承父级的 none） */
+  #radio-controls, #radio-queue { pointer-events: auto; }
+  /* 底部电台控制条（浮层）
+     必须高于 main(z-index:1) 与 footer(z-index:2)：
+     曾因嵌套在 #radio(z-index:0) 内部导致浮层实际层级低于 main，点击被拦截 */
+  #radio-controls {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    display: none; flex-direction: column;
+    padding: 10px 16px 12px;
+    background: linear-gradient(180deg, rgba(8,12,16,0.78), rgba(5,6,8,0.94));
+    border-top: 1px solid rgba(214,248,255,0.12);
+    backdrop-filter: blur(10px);
+  }
+  body.radio-on #radio-controls { display: flex; }
+  #radio-now { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  #radio-cover { width: 52px; height: 52px; border-radius: 8px; background: #16202c; }
+  #radio-track-info { min-width: 0; flex: 1; }
+  #radio-title {
+    font-size: 14px; font-weight: bold; color: #d6f8ff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #radio-meta { font-size: 11px; color: #7fae9e; margin-top: 2px; }
+  #radio-seekrow { display: flex; align-items: center; gap: 10px; }
+  #radio-time { font-size: 12px; color: #7fae9e; min-width: 92px; text-align: center; font-variant-numeric: tabular-nums; }
+  #radio-seek { flex: 1; }
+  #radio-btnrow { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  #radio-btnrow .spacer { flex: 1; }
+  .rbtn {
+    background: transparent;
+    color: #d6f8ff;
+    border: 1px solid rgba(214,248,255,0.18);
+    border-radius: 50%;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .rbtn:hover { border-color: #9cffdf; color: #9cffdf; }
+  .rbtn.on { color: #050608; background: #9cffdf; border-color: #9cffdf; }
+  .rbtn.rbtn-main { width: 44px; height: 44px; font-size: 19px; }
+  /* 滑块（进度 / 音量）统一样式 */
+  input[type=range].r-slider {
+    -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px;
+    background: rgba(214,248,255,0.18);
+    outline: none; cursor: pointer;
+  }
+  input[type=range].r-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #9cffdf; border: 1px solid rgba(0,0,0,0.4);
+  }
+  input[type=range].r-slider::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #9cffdf; border: 1px solid rgba(0,0,0,0.4);
+  }
+  #radio-volume { width: 88px; }
+  /* 播放队列浮层（可展开收起） */
+  #radio-queue {
+    position: fixed; top: 46px; right: 12px; z-index: 60;
+    width: min(300px, 40vw);
+    max-height: 45%;
+    display: none; flex-direction: column;
+    background: rgba(8,12,16,0.86);
+    border: 1px solid rgba(214,248,255,0.14);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+  }
+  #radio-queue.show { display: flex; }
+  #radio-queue-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(214,248,255,0.12);
+    font-size: 12px; color: #d6f8ff; font-weight: bold;
+  }
+  #radio-queue-head .q-count { color: #7fae9e; font-weight: normal; }
+  #radio-queue-list { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 0; }
+  .q-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 12px; cursor: pointer;
+    font-size: 12px; color: #bfe6d8;
+    border-left: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .q-item:hover { background: rgba(156,255,223,0.07); }
+  .q-item.active { border-left-color: #9cffdf; color: #fff0b8; background: rgba(156,255,223,0.08); }
+  .q-item .q-num { color: #5f7f74; width: 22px; flex: 0 0 22px; text-align: right; }
+  .q-item .q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .q-item .q-x { color: #5f7f74; padding: 0 2px; }
+  .q-item .q-x:hover { color: #fff0b8; }
+  /* 电台模式：终端底部让位给控制条，隐藏 footer */
+  body.radio-on main { padding-bottom: 150px; }
+  body.radio-on footer { display: none; }
+  /* 导入按钮 */
+  #btnRadioImport {
+    background: rgba(156,255,223,0.12);
+    color: #9cffdf;
+    border: 1px solid rgba(156,255,223,0.4);
+  }
+  #btnRadioImport:hover { background: rgba(156,255,223,0.2); }
+  #rbtn-import { font-size: 17px; }
+  /* 歌词 / 均衡器 浮层（body 直接子级，z-index 60，与队列同级） */
+  #radio-lyrics, #radio-eq {
+    position: fixed; top: 46px; right: 12px; z-index: 60;
+    width: min(340px, 46vw);
+    max-height: 52%;
+    display: none; flex-direction: column;
+    background: rgba(8,12,16,0.86);
+    border: 1px solid rgba(214,248,255,0.14);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+  }
+  /* 歌词 / 均衡器面板：mineradio 原版透明玻璃材质（#bottom-bar.visible 同款——
+     背景 rgba(0,0,0,.05) 极透 + blur(12px) saturate(1.8) brightness(1.16)
+     + 白色内高光 + 多层柔影），边框沿用视觉控制台青色细边、圆角 20px */
+  #radio-lyrics, #radio-eq {
+    background: rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,245,212,0.16);
+    border-radius: 20px;
+    box-shadow: inset 0 0 2px 1px rgba(255,255,255,0.35),
+                inset 0 0 10px 4px rgba(255,255,255,0.12),
+                0 4px 16px rgba(17,17,26,0.05), 0 8px 24px rgba(17,17,26,0.05), 0 16px 56px rgba(17,17,26,0.05),
+                inset 0 4px 16px rgba(17,17,26,0.05), inset 0 8px 24px rgba(17,17,26,0.05), inset 0 16px 56px rgba(17,17,26,0.05);
+    backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
+    -webkit-backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
+  }
+  #radio-lyrics-head, #radio-eq-head {
+    border-bottom-color: rgba(0,245,212,0.12);
+    cursor: grab; user-select: none;
+  }
+  #radio-lyrics-head:active, #radio-eq-head:active { cursor: grabbing; }
+  /* 浮层面板内细滚动条 */
+  #radio-lyrics-body::-webkit-scrollbar, #radio-eq-body::-webkit-scrollbar { width: 6px; }
+  #radio-lyrics-body::-webkit-scrollbar-thumb, #radio-eq-body::-webkit-scrollbar-thumb { background: rgba(0,245,212,0.25); border-radius: 3px; }
+  #radio-lyrics-body::-webkit-scrollbar-track, #radio-eq-body::-webkit-scrollbar-track { background: transparent; }
+  #radio-lyrics.show, #radio-eq.show { display: flex; }
+  #radio-lyrics-head, #radio-eq-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(214,248,255,0.12);
+    font-size: 12px; color: #d6f8ff; font-weight: bold;
+  }
+  #radio-lyrics-head .q-count { color: #7fae9e; font-weight: normal; }
+  #radio-lyrics-body {
+    flex: 1; overflow-y: auto; min-height: 0;
+    padding: 10px 14px;
+    font-size: 13px; line-height: 1.75;
+    color: #8fb3a4;
+    text-align: center;
+  }
+  #radio-lyrics-body .l-line { color: #8fb3a4; transition: color 0.25s; }
+  #radio-lyrics-body .l-line.active { color: #fff0b8; font-weight: bold; }
+  #radio-lyrics-body .l-empty { color: #5f7f74; font-size: 12px; padding: 20px 0; }
+  #radio-eq-body { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 14px 10px; }
+  /* 立体声控制区（Width / Balance） */
+  #radio-eq-stereo { padding: 2px 14px 4px; border-bottom: 1px solid rgba(0,245,212,0.08); }
+  #radio-eq-stereo .eq-row { padding: 3px 0; }
+  #radio-eq-stereo .eq-freq { width: 52px; color: #9cffdf; }
+  #radio-eq-stereo input[type=range] { height: 12px; }
+  /* 均衡器 3D 可视化 */
+  #radio-eq-viz { display: block; width: 100%; height: 96px; margin: 4px 0 2px; }
+  .eq-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 0; font-size: 12px; color: #bfe6d8;
+  }
+  .eq-row .eq-freq { width: 52px; flex: 0 0 52px; color: #7fae9e; text-align: right; }
+  .eq-row input[type=range] { flex: 1; }
+  .eq-row .eq-val { width: 34px; flex: 0 0 34px; color: #fff0b8; text-align: right; }
+  /* Q 值行：紧凑，与增益行成对出现 */
+  .eq-row.eq-qrow { padding: 0 0 6px 0; font-size: 11px; color: #7fae9e; }
+  .eq-row.eq-qrow .eq-q { width: 52px; flex: 0 0 52px; text-align: right; color: #6f9a8c; }
+  .eq-row.eq-qrow input[type=range] { height: 10px; }
+  .eq-row.eq-qrow .eq-qval { width: 34px; flex: 0 0 34px; color: #9cffdf; text-align: right; }
+  .rbtn-mini {
+    margin-left: auto;
+    background: rgba(156,255,223,0.12); color: #9cffdf;
+    border: 1px solid rgba(156,255,223,0.4); border-radius: 6px;
+    font-size: 11px; padding: 2px 10px; cursor: pointer;
+  }
+  .rbtn-mini:hover { background: rgba(156,255,223,0.2); }
+  .rbtn-mini.off { background: rgba(127,127,127,0.14); color: #7f8c86; border-color: rgba(127,127,127,0.3); }
+
+  /* ================= 移动端浏览器适配（手机/平板，max-width:640px） ================= */
+  @media (max-width: 640px) {
+    html, body { overflow: hidden; }
+    body { height: 100vh; height: 100dvh; }   /* 100dvh：避开手机虚拟键盘遮挡 */
+    header { padding: 6px 8px; gap: 6px; }
+    header .subtitle { display: none; }
+    header .title { letter-spacing: 0; font-size: 12px; }
+    header .btn { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+    #appearancePanel { min-width: 190px; }
+    main { padding: 4px; }
+    #terminal, #terminal .xterm, #terminal .xterm-screen { touch-action: none; }
+    footer { padding: 4px 8px; font-size: 10px; }
+
+    /* 歌词 / EQ 浮层：小屏拉宽（原 46vw 太窄），顶部避让 header */
+    #radio-lyrics, #radio-eq {
+      width: min(360px, 94vw);
+      right: 3vw; top: 52px;
+      max-height: 68vh;
+    }
+    #radio-eq-viz { height: 76px; }
+    .eq-row { gap: 6px; }
+    .eq-row .eq-freq, #radio-eq-stereo .eq-freq { width: 42px; flex-basis: 42px; font-size: 11px; }
+    .eq-row .eq-val, .eq-row.eq-qrow .eq-qval { width: 30px; flex-basis: 30px; }
+    .eq-row.eq-qrow .eq-q { width: 42px; flex-basis: 42px; }
+    .eq-row input[type=range], #radio-eq-stereo input[type=range] { touch-action: none; }
+    #radio-lyrics-body { font-size: 14px; }
+
+    /* 播放队列浮层 */
+    #radio-queue { width: min(340px, 94vw); right: 3vw; top: 52px; max-height: 60vh; }
+
+    /* 底部电台控制条压缩 */
+    #radio-controls { padding: 8px 10px 10px; }
+    #radio-cover { width: 44px; height: 44px; }
+    #radio-title { font-size: 13px; }
+    #radio-btnrow { gap: 8px; }
+    .rbtn { width: 32px; height: 32px; font-size: 13px; }
+    .rbtn.rbtn-main { width: 40px; height: 40px; font-size: 17px; }
+    #radio-volume { width: 64px; }
+    #radio-time { min-width: 70px; font-size: 11px; }
+    body.radio-on main { padding-bottom: 138px; }
+  }
+  @media (max-width: 420px) {
+    header .controls { gap: 4px; }
+    #btnRadioImport { font-size: 10px; padding: 4px 6px; }
+    #appearancePanel { min-width: 170px; }
+  }
+
+</style>
+</head>
+<body>
+  <div id="jserror"></div>
+  <video id="bgVideo" autoplay loop muted playsinline></video>
+  <div id="bgOverlay"></div>
+  <header>
+    <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+    <span class="title">Cyril</span>
+    <span class="subtitle">Web Terminal for Kali Linux · Debian</span>
+    <span class="controls">
+      <button id="btnAppearance" class="btn">外观</button>
+      <button id="btnWall" class="btn">壁纸</button>
+      <button id="btnRadioImport" class="btn" title="导入本地音乐到电台">电台导入</button>
+      <button id="btnMode" class="btn">Mineradio</button>
+      <button id="btnLumiere" class="btn" title="进入电台并开启绘光（舞台光束 + 烟雾 + 浮尘背景）">绘光</button>
+      <div id="appearancePanel">
+        <div class="panel-row">
+          <button id="btnBlack" class="btn">黑</button>
+          <button id="btnWhite" class="btn">白</button>
+        </div>
+        <div class="panel-row">
+          <span class="ctrl-label">白罩</span>
+          <input type="range" id="whiteOverlay" min="0" max="100" value="0" title="白罩透明度：0=壁纸原貌，100=纯白">
+        </div>
+        <div class="panel-row">
+          <button id="btnBgMenu" class="btn">背景 ▸</button>
+          <button id="btnBgClear" class="btn" disabled>清除</button>
+        </div>
+        <div id="bgSubmenu">
+          <button id="btnBg" class="btn">图片…</button>
+          <button id="btnVideo" class="btn">视频…</button>
+        </div>
+        <input type="file" id="bgFile" accept="image/*" style="display:none">
+        <input type="file" id="videoFile" accept="video/*" style="display:none">
+      </div>
+    </span>
+    <span id="status" class="disconn">connecting…</span>
+  </header>
+  <main><div id="terminal"></div></main>
+  <footer><b>Kali WebTerm</b> — 基于 Kali Linux 终端改造 · 输入真实命令执行 · Ctrl+C 中断 · 窗口自适应</footer>
+
+  <!-- Mineradio · 银河电台背景层（终端保留，银河只是背景）
+       注意：#radio-controls / #radio-queue 必须作为 body 直接子级、
+       不能嵌套在 #radio（z-index:0）内部，否则会被其 stacking context
+       限制在实际层级 main(z-index:1) 之下，点击被透明 main 拦截（点不动）。 -->
+  <div id="radio" aria-hidden="true">
+    <canvas id="galaxy-canvas"></canvas>
+    <canvas id="lumiere-canvas"></canvas>
+  </div>
+  <div id="radio-controls">
+    <div id="radio-now">
+      <canvas id="radio-cover" width="52" height="52"></canvas>
+      <div id="radio-track-info">
+        <div id="radio-title">Mineradio · 银河电台</div>
+        <div id="radio-meta">未在播放</div>
+      </div>
+    </div>
+    <div id="radio-seekrow">
+      <span id="radio-time">0:00 / 0:00</span>
+      <input type="range" id="radio-seek" class="r-slider" min="0" max="1000" value="0">
+      <input type="range" id="radio-volume" class="r-slider" min="0" max="100" value="80" title="音量">
+    </div>
+    <div id="radio-btnrow">
+      <button id="rbtn-shuffle" class="rbtn" title="随机播放">⇄</button>
+      <button id="rbtn-prev" class="rbtn" title="上一首">⏮</button>
+      <button id="rbtn-play" class="rbtn rbtn-main" title="播放/暂停">▶</button>
+      <button id="rbtn-next" class="rbtn" title="下一首">⏭</button>
+      <button id="rbtn-loop" class="rbtn" title="循环模式">↻</button>
+      <button id="rbtn-lyrics" class="rbtn" title="歌词">词</button>
+      <button id="rbtn-eq" class="rbtn" title="均衡器">EQ</button>
+      <span class="spacer"></span>
+      <button id="rbtn-bg" class="rbtn" title="背景：银河 / 绘光">绘光</button>
+      <button id="rbtn-import" class="rbtn" title="导入音乐">＋</button>
+      <button id="rbtn-queue" class="rbtn" title="播放队列">☰</button>
+    </div>
+  </div>
+  <div id="radio-queue">
+    <div id="radio-queue-head"><span>播放队列</span><span class="q-count" id="radio-qcount">0 首</span></div>
+    <div id="radio-queue-list"></div>
+  </div>
+  <div id="radio-lyrics">
+    <div id="radio-lyrics-head"><span>歌词</span><span class="q-count" id="radio-lcount"></span></div>
+    <div id="radio-lyrics-body"></div>
+  </div>
+  <div id="radio-eq">
+    <div id="radio-eq-head">
+      <span>均衡器</span>
+      <button id="rbtn-eq-toggle" class="rbtn-mini" title="EQ 开关">开</button>
+    </div>
+    <!-- 立体声控制：Width（M/S 宽度）/ Balance（声道平衡） -->
+    <div id="radio-eq-stereo">
+      <div class="eq-row">
+        <span class="eq-freq">Width</span>
+        <input id="eq-width" type="range" min="0" max="2" step="0.05" value="1">
+        <span class="eq-val" id="eq-width-val">1.00</span>
+      </div>
+      <div class="eq-row">
+        <span class="eq-freq">Bal</span>
+        <input id="eq-balance" type="range" min="-1" max="1" step="0.05" value="0">
+        <span class="eq-val" id="eq-balance-val">0.00</span>
+      </div>
+    </div>
+    <canvas id="radio-eq-viz"></canvas>
+    <div id="radio-eq-body"></div>
+  </div>
+  <input type="file" id="radio-files" accept="audio/*,.lrc,.txt" multiple style="display:none">
+
+<script src="lumiere.js"></script>
+<script src="xterm.min.js"></script>
+<script src="addon-fit.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---- 页面脚本错误直接显示在顶部（方便排查）----
+  window.addEventListener('error', function (ev) {
+    var el = document.getElementById('jserror');
+    if (el) {
+      el.style.display = 'block';
+      el.textContent = '页面脚本错误: ' + ev.message + '  @ ' + (ev.filename || '') + ':' + (ev.lineno || '');
+    }
+  });
+
+  // ---- 双主题配色（黑 / 白，仿 Kali 深浅界面）----
+  const THEMES = {
+    dark: {
+      background: '#141414', foreground: '#d3d7cf',
+      cursor: '#73d216', cursorAccent: '#141414',
+      selectionBackground: 'rgba(115,210,22,0.25)',
+      black: '#000000', red: '#ef2929', green: '#73d216', yellow: '#fce94f',
+      blue: '#3465a4', magenta: '#75507b', cyan: '#06989a', white: '#eeeeec',
+      brightBlack: '#555753', brightRed: '#ef2929', brightGreen: '#8ae234',
+      brightYellow: '#fce94f', brightBlue: '#729fcf', brightMagenta: '#ad7fa8',
+      brightCyan: '#34e2e2', brightWhite: '#ffffff'
+    },
+    light: {
+      background: '#f5f5f4', foreground: '#2e3436',
+      cursor: '#3465a4', cursorAccent: '#f5f5f4',
+      selectionBackground: 'rgba(52,101,164,0.25)',
+      black: '#000000', red: '#cc0000', green: '#4e9a06', yellow: '#c4a000',
+      blue: '#3465a4', magenta: '#75507b', cyan: '#06989a', white: '#d3d7cf',
+      brightBlack: '#555753', brightRed: '#ef2929', brightGreen: '#8ae234',
+      brightYellow: '#fce94f', brightBlue: '#729fcf', brightMagenta: '#ad7fa8',
+      brightCyan: '#34e2e2', brightWhite: '#ffffff'
+    }
+  };
+
+  if (typeof Terminal === 'undefined') {
+    document.getElementById('jserror').style.display = 'block';
+    document.getElementById('jserror').textContent = 'xterm.js 加载失败：请确认 web/ 目录下存在 xterm.min.js（本地文件）';
+    return;
+  }
+
+  const term = new Terminal({
+    cursorBlink: true,
+    fontSize: (window.innerWidth <= 640 ? 13 : 15),   // 手机小屏用 13px，桌面 15px
+    fontFamily: '"DejaVu Sans Mono", "Noto Sans Mono CJK SC", Menlo, Consolas, monospace',
+    theme: THEMES.dark,
+    scrollback: 5000,
+    allowTransparency: true,   // 背景图时终端透明
+    convertEol: false
+  });
+
+  let fit = null;
+  if (typeof FitAddon !== 'undefined') {
+    fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+  }
+  term.open(document.getElementById('terminal'));
+  try { fit.fit(); } catch (e) { /* 无 fit 插件时忽略 */ }
+
+  const statusEl = document.getElementById('status');
+  function setStatus(text, connected) {
+    statusEl.textContent = text;
+    statusEl.className = connected ? 'conn' : 'disconn';
+  }
+
+  // ================= 主题切换 =================
+  let themeName = localStorage.getItem('kali-webterm-theme') || 'dark';
+  let hasBg = false;
+  let _bgUrl = null;      // 当前背景图 blob URL（用于释放）
+  let _videoUrl = null;   // 当前视频壁纸 blob URL（用于释放）
+  let _userChanged = false;  // 用户主动改过背景（防止异步恢复覆盖用户操作）
+
+  function applyTheme(name) {
+    themeName = name;
+    localStorage.setItem('kali-webterm-theme', name);
+    document.body.classList.toggle('light', name === 'light');
+    const t = THEMES[name];
+    // 有背景图/视频/银河电台时：终端用半透明 rgba 背景（xterm 的 'transparent' 会渲染成不透明黑，
+    // 必须用 rgba 才能透出背景图/视频/银河粒子）；遮罩由 rgba 自身承担
+    const radioOn = document.body.classList.contains('radio-on');
+    const theme = (hasBg || hasVideo || radioOn) ? Object.assign({}, t, {
+      background: name === 'light' ? 'rgba(245,245,244,0)' : 'rgba(20,20,20,0)'
+    }) : t;
+    // xterm 5.x：setOption 已移除；且只能逐键更新（整体展开会把 cols 等
+    // 构造期选项也带进去，导致 "Option cols can only be set in the constructor"）
+    term.options = { theme: theme, cursor: theme.cursor };
+    document.getElementById('btnBlack').classList.toggle('active', name === 'dark');
+    document.getElementById('btnWhite').classList.toggle('active', name === 'light');
+  }
+
+  document.getElementById('btnBlack').addEventListener('click', function () { applyTheme('dark'); });
+  document.getElementById('btnWhite').addEventListener('click', function () { applyTheme('light'); });
+
+  // ================= 「外观」下拉面板 =================
+  const appearanceBtn = document.getElementById('btnAppearance');
+  const appearancePanel = document.getElementById('appearancePanel');
+  appearanceBtn.addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    appearancePanel.style.display = appearancePanel.style.display === 'block' ? 'none' : 'block';
+  });
+  document.addEventListener('click', function (ev) {
+    if (!appearancePanel.contains(ev.target) && ev.target !== appearanceBtn) {
+      appearancePanel.style.display = 'none';
+      document.getElementById('bgSubmenu').style.display = 'none';
+    }
+  });
+  // 「背景 ▸」展开子菜单：图片… / 视频…
+  const bgMenuBtn = document.getElementById('btnBgMenu');
+  const bgSubmenu = document.getElementById('bgSubmenu');
+  bgMenuBtn.addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    bgSubmenu.style.display = bgSubmenu.style.display === 'block' ? 'none' : 'block';
+  });
+
+  // ================= 终端背景图 / 视频壁纸 =================
+  let hasVideo = false;
+
+  function stopVideo() {
+    const v = document.getElementById('bgVideo');
+    v.pause();
+    v.removeAttribute('src');
+    v.load();            // 释放资源
+    v.style.display = 'none';
+    if (_videoUrl) { URL.revokeObjectURL(_videoUrl); _videoUrl = null; }
+  }
+
+  function setBackground(dataUrl) {
+    hasBg = true;
+    hasVideo = false;
+    stopVideo();
+    const old = _bgUrl;
+    document.body.style.backgroundImage = 'url(' + dataUrl + ')';
+    _bgUrl = dataUrl.indexOf('blob:') === 0 ? dataUrl : null;
+    if (old && old !== _bgUrl) { URL.revokeObjectURL(old); }
+    document.getElementById('bgOverlay').style.display = 'block';
+    document.getElementById('btnBgClear').disabled = false;
+    applyTheme(themeName);          // 重设终端为透明
+    syncWhiteOverlay();
+  }
+
+  function setVideo(url) {
+    hasBg = false;
+    hasVideo = true;
+    document.body.style.backgroundImage = '';
+    const v = document.getElementById('bgVideo');
+    const old = _videoUrl;
+    v.src = url;
+    _videoUrl = url;
+    if (old && old !== _videoUrl) { URL.revokeObjectURL(old); }
+    v.style.display = 'block';
+    v.play().catch(function () { /* 自动播放被拒时静默 */ });
+    document.getElementById('bgOverlay').style.display = 'block';
+    document.getElementById('btnBgClear').disabled = false;
+    applyTheme(themeName);          // 重设终端为透明
+    syncWhiteOverlay();
+  }
+
+  function clearBackground() {
+    hasBg = false;
+    hasVideo = false;
+    document.body.style.backgroundImage = '';
+    stopVideo();
+    if (_bgUrl) { URL.revokeObjectURL(_bgUrl); _bgUrl = null; }
+    document.getElementById('bgOverlay').style.display = 'none';
+    document.getElementById('btnBgClear').disabled = true;
+    applyTheme(themeName);          // 恢复主题背景色
+    syncWhiteOverlay();
+    clearBgPersist();               // 清除已保存的背景设置
+    _userChanged = true;
+  }
+
+  // ================= 设置自动持久化（IndexedDB + localStorage） =================
+  // 主题走 localStorage；背景图/视频体积可能很大，存 IndexedDB（配额远大于 localStorage）；
+  // 内置壁纸按名字记忆，启动时重新从服务器拉取，不占本地配额。
+  const DB_NAME = 'cyril-webterm-settings';
+  const DB_STORE = 'media';
+
+  function openDb() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error('IndexedDB 不可用')); return; }
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = function () {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error || new Error('IndexedDB 打开失败')); };
+    });
+  }
+  function dbPut(key, blob) {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(blob, key);
+        tx.oncomplete = function () { db.close(); resolve(); };
+        tx.onerror = function () { db.close(); reject(tx.error); };
+      });
+    });
+  }
+  function dbGet(key) {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(DB_STORE, 'readonly');
+        const req = tx.objectStore(DB_STORE).get(key);
+        req.onsuccess = function () { db.close(); resolve(req.result); };
+        req.onerror = function () { db.close(); reject(req.error); };
+      });
+    });
+  }
+  function dbDelete(key) {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).delete(key);
+        tx.oncomplete = function () { db.close(); resolve(); };
+        tx.onerror = function () { db.close(); reject(tx.error); };
+      });
+    });
+  }
+
+  // 保存类型：custom=自定义图片 / video=自定义视频 / builtin-light|builtin-dark=内置壁纸 / 空=无
+  function persistBgImage(blob) {
+    localStorage.setItem('kali-webterm-bg-kind', 'custom');
+    dbPut('bg-image', blob).catch(function () { flashNotice('背景图未能持久保存（刷新后恢复默认）'); });
+    dbDelete('bg-video').catch(function () {});
+  }
+  function persistBgVideo(blob) {
+    localStorage.setItem('kali-webterm-bg-kind', 'video');
+    dbPut('bg-video', blob).catch(function () { flashNotice('视频壁纸未能持久保存（刷新后恢复默认）'); });
+    dbDelete('bg-image').catch(function () {});
+  }
+  function persistBgBuiltin(kind) {
+    localStorage.setItem('kali-webterm-bg-kind', kind);
+    dbDelete('bg-image').catch(function () {});
+    dbDelete('bg-video').catch(function () {});
+  }
+  function clearBgPersist() {
+    localStorage.removeItem('kali-webterm-bg-kind');
+    localStorage.removeItem('kali-webterm-white');
+    dbDelete('bg-image').catch(function () {});
+    dbDelete('bg-video').catch(function () {});
+  }
+
+  // 启动时恢复上次的背景 / 白罩设置（异步，若用户已主动修改则放弃恢复）
+  function restoreSettings() {
+    if (_userChanged) return;
+    const kind = localStorage.getItem('kali-webterm-bg-kind') || '';
+    let white = parseInt(localStorage.getItem('kali-webterm-white') || '0', 10);
+    if (isNaN(white)) white = 0;
+    white = Math.max(0, Math.min(100, white));
+    function finish() {
+      if (_userChanged) return;
+      if (white > 0) {
+        whiteSlider.value = String(white);
+        applyWhiteOverlay();
+      }
+    }
+    if (kind === 'custom') {
+      dbGet('bg-image').then(function (blob) {
+        if (_userChanged) return;
+        if (blob) setBackground(URL.createObjectURL(blob));
+        finish();
+      }).catch(function () { finish(); });
+    } else if (kind === 'video') {
+      dbGet('bg-video').then(function (blob) {
+        if (_userChanged) return;
+        if (blob) setVideo(URL.createObjectURL(blob));
+        finish();
+      }).catch(function () { finish(); });
+    } else if (kind === 'builtin-light' || kind === 'builtin-dark') {
+      const f = kind === 'builtin-light' ? 'wallpaper.jpg' : 'wallpaper_dark.jpg';
+      fetch(f).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      }).then(function (b) {
+        if (_userChanged) return;
+        setBackground(URL.createObjectURL(b));
+      }).catch(function () { /* 壁纸缺失：保持默认 */ }).then(finish);
+    } else {
+      finish();
+    }
+  }
+
+  var _flashTimer = null;
+  function flashNotice(msg) {
+    setStatus(msg, false);
+    if (_flashTimer) clearTimeout(_flashTimer);
+    _flashTimer = setTimeout(function () {
+      const ok = ws && ws.readyState === WebSocket.OPEN;
+      setStatus(ok ? 'connected' : 'disconnected · 重连中…', ok);
+    }, 4000);
+  }
+
+  // 内置壁纸（web/wallpaper*.jpg，随项目分发，无外网依赖）。
+  // 白色主题 -> 原 wallpaper.jpg；黑色主题 -> wallpaper_dark.jpg
+  document.getElementById('btnWall').addEventListener('click', function () {
+    _userChanged = true;
+    const f = themeName === 'light' ? 'wallpaper.jpg' : 'wallpaper_dark.jpg';
+    fetch(f).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(function (b) {
+      setBackground(URL.createObjectURL(b));
+      persistBgBuiltin(themeName === 'light' ? 'builtin-light' : 'builtin-dark');
+    }).catch(function () {
+      setStatus('壁纸加载失败', false);
+    });
+  });
+  document.getElementById('btnBg').addEventListener('click', function () {
+    document.getElementById('bgFile').click();
+  });
+  document.getElementById('bgFile').addEventListener('change', function () {
+    const f = this.files && this.files[0];
+    if (!f) return;
+    _userChanged = true;
+    setBackground(URL.createObjectURL(f));
+    persistBgImage(f);
+    this.value = '';
+  });
+  // 视频壁纸：本地视频 -> <video> 循环播放铺底
+  document.getElementById('btnVideo').addEventListener('click', function () {
+    document.getElementById('videoFile').click();
+  });
+  document.getElementById('videoFile').addEventListener('change', function () {
+    const f = this.files && this.files[0];
+    if (!f) return;
+    _userChanged = true;
+    setVideo(URL.createObjectURL(f));
+    persistBgVideo(f);
+    this.value = '';
+  });
+  document.getElementById('btnBgClear').addEventListener('click', clearBackground);
+
+  // ================= 白罩透明度滑块 =================
+  // 白色半透明罩盖在壁纸上（bgOverlay），滑块控制其不透明度；
+  // 默认 0 = 完全透明，壁纸原貌（与"网页已经完美了"时一致），用户可自行调浅壁纸让文字更清晰
+  const overlayEl = document.getElementById('bgOverlay');
+  const whiteSlider = document.getElementById('whiteOverlay');
+  function applyWhiteOverlay() {
+    const v = Number(whiteSlider.value) / 100;
+    overlayEl.style.backgroundColor = v > 0 ? 'rgba(255,255,255,' + v + ')' : 'transparent';
+  }
+  whiteSlider.addEventListener('input', function () {
+    if (!(hasBg || hasVideo)) return;   // 无背景时滑块无效（无壁纸可罩）
+    applyWhiteOverlay();
+    localStorage.setItem('kali-webterm-white', whiteSlider.value);
+  });
+  // 无背景时禁用滑块，清除背景时归零
+  function syncWhiteOverlay() {
+    const has = hasBg || hasVideo;
+    whiteSlider.disabled = !has;
+    if (!has) { whiteSlider.value = 0; applyWhiteOverlay(); }
+  }
+  syncWhiteOverlay();   // 初始：无壁纸 -> 滑块禁用、归零
+
+  // 恢复上次主题
+  applyTheme(themeName);
+
+  // 恢复上次背景图/壁纸/白罩（异步读取 IndexedDB / 拉取内置壁纸）
+  restoreSettings();
+
+  // ---- 认证令牌：URL 中 ?token=xxx（可选，对应服务端 WEBTERM_TOKEN）----
+  const token = new URLSearchParams(location.search).get('token') || null;
+  const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const wsUrl = scheme + location.host + location.pathname.replace(/index\.html$/, '');
+
+  let ws = null;
+  let authed = !token;
+  let retryTimer = null;
+
+  // ---- 窗口自适应：尺寸变化 -> PTY resize ----
+  function sendResize() {
+    if (!authed || !ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      if (fit) fit.fit();
+      const dims = term.dimensions; // {rows, cols, height, width}
+      if (dims && dims.rows && dims.cols) {
+        ws.send(JSON.stringify({ type: 'resize', rows: dims.rows, cols: dims.cols }));
+      }
+    } catch (e) { /* 忽略 */ }
+  }
+  let resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(sendResize, 120);
+  });
+
+  function connect() {
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    ws = new WebSocket(wsUrl);
+    ws.onopen = function () {
+      if (token) {
+        ws.send(JSON.stringify({ type: 'auth', token: token }));
+      } else {
+        authed = true;
+      }
+      setStatus('connected', true);
+      setTimeout(sendResize, 100);
+    };
+    ws.onmessage = function (ev) {
+      let data = ev.data;
+      if (typeof data === 'string') {
+        // 协议控制帧（JSON）与原始终端输出（ANSI）区分
+        if (data.startsWith('{')) {
+          try {
+            const m = JSON.parse(data);
+            if (m.type === 'error') { setStatus(m.message, false); }
+            if (m.type === 'ok') { authed = true; setStatus('connected', true); }
+            return;
+          } catch (e) { /* 不是 JSON，按终端输出处理 */ }
+        }
+        term.write(data);
+      } else {
+        term.write(new Uint8Array(data));
+      }
+    };
+    ws.onclose = function () {
+      setStatus('disconnected · 重连中…', false);
+      retryTimer = setTimeout(connect, 3000);
+    };
+    ws.onerror = function () {
+      setStatus('连接错误', false);
+    };
+  }
+
+  // ---- 键盘输入 -> WebSocket ----
+  term.onData(function (data) {
+    if (!authed || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'input', data: data }));
+  });
+
+  // 初始同步一次尺寸
+  setTimeout(sendResize, 200);
+
+  // 建立连接
+  connect();
+
+  // 聚焦终端，方便直接输入
+  term.focus();
+
+  // 暴露给电台模式：切换 radio-on 后重设终端透明背景并重新适配尺寸
+  window.__cyrilApplyTheme = function () { applyTheme(themeName); };
+  window.__cyrilRefit = function () { sendResize(); };
+})();
+</script>
+<script>
+/* ====================================================================
+ * Mineradio · 银河电台模式
+ * - 银河星轨粒子效果：移植自 oirge/Mineradio 的 wallpaper-effect.js
+ *   （Canvas 2D，零依赖；GPL-3.0，保留来源署名）
+ * - 基础功能：本地音乐导入 / 播放队列 / 播放控制 / 进度 / 音量 /
+ *   循环(关/全部/单曲) / 随机
+ * - 与 Cyril Kali 终端界面通过顶栏按钮切换共存，切换不中断 WebSocket
+ * ================================================================== */
+(function () {
+  "use strict";
+  var mode = 'kali';                       // kali | radio
+  var bgMode = 'galaxy';                   // 电台背景：galaxy（银河）| lumiere（绘光）
+  var radioEl = document.getElementById('radio');
+  var termEl  = document.getElementById('terminal');
+  var btnMode = document.getElementById('btnMode');
+  var canvas  = document.getElementById('galaxy-canvas');
+  var ctx     = canvas ? canvas.getContext('2d', { alpha: false }) : null;
+
+  /* ---------------- 银河星场粒子（对齐 oirge/Mineradio「星河」预设观感） ----------------
+     原版 = app.js preset 5 WALLPAPER PULSE：
+     · 深邃纯黑底（无青绿渐变、无中心光斑）
+     · 中下部螺旋星带：粒子密集、带心亮边缘淡，白/淡蓝/淡紫
+     · 深空星尘：全屏稀疏细点，白色偏冷
+     结构 = 单层 Canvas 2D，粒子数随面积自适应 */
+  function rand(seed) { return Math.abs(Math.sin(seed * 3187.917) * 43758.5453) % 1; }
+
+  var particles = [];
+  var galaxyPlaying = false;
+  var galaxyRunning = false;
+  var galaxyHandle = 0;
+
+  var BAND_COLORS = ['#ffffff', '#eef4ff', '#dce8ff', '#c3d3ff', '#b9bcff', '#d8ccff'];
+  var DUST_COLORS = ['#ffffff', '#e2ecff', '#cdd9ff'];
+
+  /* 星光精灵：中心白核 → 颜色 → 边缘透明（径向渐变），
+     对齐原版 point-sprite 观感——自然溢光，无外圈圆环 */
+  function hexRgb(hex) {
+    var h = String(hex).replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return { r: parseInt(h.substr(0, 2), 16), g: parseInt(h.substr(2, 2), 16), b: parseInt(h.substr(4, 2), 16) };
+  }
+  var spriteCache = {};
+  function spriteFor(col) {
+    var s = spriteCache[col];
+    if (s) return s;
+    var size = 96;
+    var c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    var g = c.getContext('2d');
+    var rgb = hexRgb(col);
+    var grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.16, col);
+    grad.addColorStop(1, 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    spriteCache[col] = c;
+    return c;
+  }
+
+  function ensureParticles() {
+    var target = Math.min(2200, Math.max(900, Math.round((innerWidth * innerHeight) / 1100)));
+    while (particles.length < target) {
+      var i = particles.length + 1;
+      var lane = rand(i * 5.9);
+      particles.push({
+        seed: i * 11.37,
+        x: rand(i) * 2 - 1,          // -1..1 横向
+        y: rand(i * 2.7),            // 0..1 纵向（星尘用）
+        lane: lane,                  // 0..1：<0.70 主星带，>=0.70 深空星尘
+        size: 0.5 + rand(i * 4.2) * 1.8,
+        col: lane < 0.70 ? BAND_COLORS[Math.floor(rand(i * 7.7) * BAND_COLORS.length) % BAND_COLORS.length]
+                         : DUST_COLORS[Math.floor(rand(i * 8.3) * DUST_COLORS.length) % DUST_COLORS.length]
+      });
+    }
+    if (particles.length > target + 120) particles.length = target;
+  }
+  function resizeGalaxy() {
+    if (!canvas || !ctx) return;
+    var dpr = Math.min(1.35, Math.max(1, window.devicePixelRatio || 1));
+    canvas.width  = Math.max(1, Math.floor(innerWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(innerHeight * dpr));
+    canvas.style.width  = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ensureParticles();
+  }
+  function drawGalaxy(nowMs) {
+    if (!ctx || !galaxyRunning) return;
+    var now = nowMs * 0.001;
+    if (galaxyPlaying) now *= 1.35;          // 播放时活动整体加快
+    ensureParticles();
+    var bass = readBass();                   // 低音能量 0..1 → 亮度/尺寸（无圆环）
+    var W = innerWidth, H = innerHeight;
+    // 深邃纯黑底
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var cx = W * 0.5;
+    var cy = H * 0.58;                       // 星带中心偏下
+    var bandW = W * 0.98;                     // 星带横向跨度
+    var bandH = H * 0.30;                     // 星带厚度
+    var flow = now * (galaxyPlaying ? 0.070 : 0.030);   // 沿带漂移（原版 flow 逻辑，加快）
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      var tw = Math.pow(0.5 + 0.5 * Math.sin(now * (0.7 + rand(p.seed) * 0.5) + p.seed * 6.283), 3);
+      var x, y, alpha, r;
+      if (p.lane < 0.70) {
+        // 主星带：粒子沿带循环流动 + 粗弧(broadWave) + 细波纹(fineWave) + 纵向脉动
+        var u = ((p.x + flow * 0.35) % 2 + 2) % 2 - 1;          // -1..1 循环滑动
+        var arc = Math.sin(u * 2.2 + flow * 2.0 + p.seed) * H * 0.038;
+        var fine = Math.sin(u * Math.PI * 2 * (0.55 + rand(p.seed) * 0.24) + now * 1.4 + p.seed * 5.7) * H * 0.014;
+        var bandT = (p.lane / 0.70);         // 0..1 带内位置
+        var edge = 1 - Math.pow(Math.abs(bandT - 0.5) * 2, 1.35);   // 带心亮、边缘淡
+        edge = Math.max(0, Math.min(1, edge));
+        x = cx + u * bandW * 0.5 + Math.sin(now * 0.5 + p.seed * 8.0) * 8;
+        y = cy + arc + fine + (bandT - 0.5) * bandH * 1.35 + Math.sin(now * 0.9 + p.seed * 2.1) * 3.2;
+        alpha = (0.12 + edge * 0.42 + tw * 0.16) + bass * 0.22 + (galaxyPlaying ? 0.04 : 0);
+        r = Math.max(0.6, p.size * (0.85 + tw * 0.6) * (0.9 + edge * 0.35) * (1 + bass * 0.30));
+      } else {
+        // 深空星尘：全屏缓慢漂移（横向滑移 + 纵向摆动），原版 drift/摆动加快
+        var ud = ((p.x + flow * 0.18) % 2 + 2) % 2 - 1;
+        x = (ud * 0.5 + 0.5) * W + Math.sin(now * 0.5 + p.seed * 3.3) * 5;
+        y = p.y * H + Math.cos(now * 0.42 + p.seed) * 6 + Math.sin(now * 0.22 + p.seed * 2.0) * 3;
+        alpha = 0.10 + tw * 0.32 + bass * 0.12 + (galaxyPlaying ? 0.03 : 0);
+        r = Math.max(0.5, p.size * (0.62 + tw * 0.55) * (1 + bass * 0.25));
+      }
+      // 自然溢光：径向渐变光点（中心亮、边缘淡出），无实心圆环
+      var spr = spriteFor(p.col);
+      var ds = Math.max(3, r * 7);           // 精灵绘制直径：白核≈r*2，外圈柔和光晕
+      ctx.globalAlpha = Math.min(1, alpha);
+      ctx.drawImage(spr, x - ds / 2, y - ds / 2, ds, ds);
+    }
+    ctx.restore();
+    galaxyHandle = requestAnimationFrame(drawGalaxy);
+  }
+  function galaxyStart() {
+    if (galaxyRunning) return;
+    galaxyRunning = true;
+    resizeGalaxy();
+    galaxyHandle = requestAnimationFrame(drawGalaxy);
+  }
+  function galaxyStop() {
+    galaxyRunning = false;
+    if (galaxyHandle) { cancelAnimationFrame(galaxyHandle); galaxyHandle = 0; }
+  }
+
+  /* ---------------- 电台背景：银河 ⇄ 绘光（Folia Lumiere 移植） ---------------- */
+  function startBackground() {
+    if (bgMode === 'lumiere') { if (window.Lumiere) Lumiere.start(); }
+    else galaxyStart();
+  }
+  function stopBackground() {
+    galaxyStop();
+    if (window.Lumiere) Lumiere.stop();
+  }
+  var rbtnBg = document.getElementById('rbtn-bg');
+  if (rbtnBg) rbtnBg.addEventListener('click', function () {
+    bgMode = (bgMode === 'galaxy') ? 'lumiere' : 'galaxy';
+    rbtnBg.classList.toggle('on', bgMode === 'lumiere');
+    rbtnBg.title = (bgMode === 'galaxy') ? '背景：银河 / 绘光' : '背景：绘光 / 银河';
+    if (mode === 'radio') {
+      if (bgMode === 'lumiere') { galaxyStop(); if (window.Lumiere) Lumiere.start(); }
+      else { if (window.Lumiere) Lumiere.stop(); galaxyStart(); }
+      document.body.classList.toggle('lumiere-on', bgMode === 'lumiere');
+    }
+    syncLumiereBtn();
+  });
+
+  /* 顶栏「绘光」一键入口：未进电台则先进电台并开启绘光；已在电台则直接切换 */
+  var btnLumiere = document.getElementById('btnLumiere');
+  function syncLumiereBtn() {
+    if (!btnLumiere) return;
+    var on = (mode === 'radio') && (bgMode === 'lumiere');
+    btnLumiere.classList.toggle('active', on);
+    btnLumiere.title = on ? '绘光已开启（点击切回银河）' : '进入电台并开启绘光（舞台光束 + 烟雾 + 浮尘背景）';
+  }
+  if (btnLumiere) btnLumiere.addEventListener('click', function () {
+    if (mode !== 'radio') btnMode.click();          // 先进电台（同步执行，mode 立即变为 radio）
+    if (bgMode !== 'lumiere') {
+      bgMode = 'lumiere';
+      if (rbtnBg) { rbtnBg.classList.add('on'); rbtnBg.title = '背景：绘光 / 银河'; }
+      if (mode === 'radio') {
+        galaxyStop();
+        if (window.Lumiere) Lumiere.start();
+        document.body.classList.add('lumiere-on');
+      }
+    } else if (mode === 'radio') {
+      // 已在绘光：点击切回银河
+      bgMode = 'galaxy';
+      if (rbtnBg) { rbtnBg.classList.remove('on'); rbtnBg.title = '背景：银河 / 绘光'; }
+      if (window.Lumiere) Lumiere.stop();
+      galaxyStart();
+      document.body.classList.remove('lumiere-on');
+    }
+    syncLumiereBtn();
+  });
+
+  /* ---------------- 低音粒子溢光（Web Audio 分析） ----------------
+     通过 AnalyserNode 提取低频能量 bassLevel(0..1)：
+     播放中低音越强 → 星带粒子越亮、光晕越大；未播放时平滑衰减为 0
+     音频链路：src → 均衡器(eqFilters×5) → analyser → destination */
+  var audioCtx = null, analyser = null, freqData = null;
+  var bassLevel = 0;
+  var eqFilters = [];          // 10 段 peaking filter（peaking gain=0 即直通）
+  var eqGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  var eqQs = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1];   // 每段 Q 值（带宽，默认 1.0）
+  var eqOn = true;
+  var EQ_BANDS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  var eqWidthNode = null;      // 立体声宽度（M/S Side 增益，1=原样，0=单声道）
+  var eqBalanceNode = null;    // 声道平衡（StereoPanner，-1~1）
+  function createStereoWidth(ctx) {
+    /* 立体声宽度（M/S 处理）：Mid=L+R, Side=L-R；输出 L'=(Mid+Side*w)/2, R'=(Mid-Side*w)/2
+       w=1 原样还原，w=0 完全单声道，w>1 加宽。单声道输入无衰减。 */
+    var splitter = ctx.createChannelSplitter(2);
+    var midSum = ctx.createGain();      // L + R
+    var sideDiff = ctx.createGain();    // L - R
+    var gL = ctx.createGain();          // L → mid
+    var gR = ctx.createGain();          // R → mid
+    var gLS = ctx.createGain();         // L → side
+    var gRS = ctx.createGain(); gRS.gain.value = -1;  // -R → side
+    splitter.connect(gL, 0); gL.connect(midSum);
+    splitter.connect(gR, 1); gR.connect(midSum);
+    splitter.connect(gLS, 0); gLS.connect(sideDiff);
+    splitter.connect(gRS, 1); gRS.connect(sideDiff);
+    var sideOut = ctx.createGain();     // 宽度系数（默认 1）
+    sideDiff.connect(sideOut);
+    var halfL = ctx.createGain(); halfL.gain.value = 0.5;   // (mid+side)/2
+    var halfR = ctx.createGain(); halfR.gain.value = 0.5;   // (mid-side)/2
+    var sideInv = ctx.createGain(); sideInv.gain.value = -1;
+    midSum.connect(halfL); sideOut.connect(halfL);
+    midSum.connect(halfR); sideOut.connect(sideInv); sideInv.connect(halfR);
+    var merger = ctx.createChannelMerger(2);
+    halfL.connect(merger, 0, 0);
+    halfR.connect(merger, 0, 1);
+    return { in: splitter, out: merger, width: sideOut };
+  }
+
+  function initBassAnalyzer() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC || audioCtx) return;
+      audioCtx = new AC();
+      var src = audioCtx.createMediaElementSource(audio);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.82;
+      // 立体声控制：Width（M/S）→ Balance（StereoPanner）→ 均衡器链
+      var stereoWidth = createStereoWidth(audioCtx);
+      eqWidthNode = stereoWidth.width;
+      src.connect(stereoWidth.in);
+      eqBalanceNode = audioCtx.createStereoPanner();
+      stereoWidth.out.connect(eqBalanceNode);
+      // 均衡器链：10 段 peaking（31Hz~16kHz，Q 可调）
+      var prev = eqBalanceNode;
+      EQ_BANDS.forEach(function (f, i) {
+        var flt = audioCtx.createBiquadFilter();
+        flt.type = 'peaking';
+        flt.frequency.value = f;
+        flt.Q.value = eqQs[i] || 1.0;
+        flt.gain.value = 0;
+        prev.connect(flt);
+        prev = flt;
+        eqFilters.push(flt);
+      });
+      prev.connect(analyser);
+      analyser.connect(audioCtx.destination);   // 保持声音可听
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+    } catch (e) { analyser = null; }
+  }
+  function readBass() {
+    if (!analyser || !freqData || !galaxyPlaying) { bassLevel *= 0.80; return bassLevel; }
+    analyser.getByteFrequencyData(freqData);
+    var n = Math.min(10, freqData.length);      // 低频段 0~约120Hz
+    var s = 0;
+    for (var i = 0; i < n; i++) s += freqData[i];
+    var t = s / (n * 255);
+    bassLevel += (t - bassLevel) * 0.35;
+    return bassLevel;
+  }
+  /* 任意频段能量 0..1（绘光：低音→光束/烟雾，高频→浮尘/灯头） */
+  function readBand(f0, f1) {
+    if (!analyser || !freqData) return 0;
+    analyser.getByteFrequencyData(freqData);
+    var n = freqData.length;
+    var i0 = Math.max(0, Math.min(n - 1, Math.round(f0 / 24000 * n)));
+    var i1 = Math.max(i0 + 1, Math.min(n, Math.round(f1 / 24000 * n)));
+    var s = 0;
+    for (var i = i0; i < i1; i++) s += freqData[i];
+    return Math.min(1, (s / ((i1 - i0) * 255)) * 1.5);
+  }
+  /* 绘光背景初始化（lumiere.js 定义 window.Lumiere） */
+  if (window.Lumiere) {
+    Lumiere.init(document.getElementById('lumiere-canvas'), {
+      band: readBand,
+      playing: function () { return galaxyPlaying; }
+    });
+  }
+
+  /* ---------------- 电台播放器基础功能 ---------------- */
+  var audio = new Audio();
+  audio.volume = 0.8;
+  initBassAnalyzer();                       // 低音分析（失败自动降级，不影响播放）
+  var queue = [];          // [{name, url}]
+  var current = -1;
+  var loopMode = 'off';    // off | all | one
+  var shuffleOn = false;
+  var seekDragging = false;
+
+  var elTitle = document.getElementById('radio-title');
+  var elMeta  = document.getElementById('radio-meta');
+  var elTime  = document.getElementById('radio-time');
+  var elSeek  = document.getElementById('radio-seek');
+  var elVol   = document.getElementById('radio-volume');
+  var elPlay  = document.getElementById('rbtn-play');
+  var elLoop  = document.getElementById('rbtn-loop');
+  var elShuffle = document.getElementById('rbtn-shuffle');
+  var elQlist = document.getElementById('radio-queue-list');
+  var elQcount= document.getElementById('radio-qcount');
+  var elQueue = document.getElementById('radio-queue');
+  var coverCanvas = document.getElementById('radio-cover');
+
+  /* ---------------- 音频元数据解析（纯标准库） ----------------
+     封面：MP3 ID3v2 APIC 帧 / M4A MP4 covr atom
+     歌词：ID3v2 USLT 帧 / MP4 ©lyr atom（嵌入歌词）
+     标题/艺术家/专辑：TIT2 TPE1 TALB / ©nam ©ART ©alb */
+  /* ---------- 音频元数据解析（ID3v2.2/2.3/2.4 + FLAC + MP4/M4A + ID3v1 兜底） ---------- */
+  function unsyncArr(arr) {
+    var out = [];
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] === 0xff && i + 1 < arr.length && arr[i + 1] === 0x00) { out.push(0xff); i++; }
+      else out.push(arr[i]);
+    }
+    return new Uint8Array(out);
+  }
+  function decodeFramesText(enc, bytes) {
+    if (enc === 1) {
+      if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+      if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+      return new TextDecoder('utf-16le').decode(bytes);
+    }
+    if (enc === 2) return new TextDecoder('utf-16be').decode(bytes);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  function normMime(mime, bytes) {
+    var m = (mime || '').toLowerCase();
+    if (m === 'image/jpg') return 'image/jpeg';
+    if (m === '-->') return 'image/jpeg';
+    if (!m || m.indexOf('image') !== 0) {
+      if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg';
+      if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png';
+      return 'image/jpeg';
+    }
+    return m;
+  }
+  function parseId3(u8, meta) {
+    var ver = u8[3];
+    var flags = u8[5];
+    var size = ((u8[6] & 0x7f) << 21) | ((u8[7] & 0x7f) << 14) | ((u8[8] & 0x7f) << 7) | (u8[9] & 0x7f);
+    var off = 10;
+    var bodyEnd = Math.min(u8.length, off + size);
+    if (flags & 0x40) {                        // 扩展头（v2.3：size+flags+padding=10B；v2.4：synchsafe size+flagbyte+data）
+      if (ver >= 4) {
+        var es4 = ((u8[off] & 0x7f) << 21) | ((u8[off + 1] & 0x7f) << 14) | ((u8[off + 2] & 0x7f) << 7) | (u8[off + 3] & 0x7f);
+        off += 4 + es4;
+      } else {
+        var es3 = ((u8[off] << 24) | (u8[off + 1] << 16) | (u8[off + 2] << 8) | u8[off + 3]) >>> 0;
+        off += 4 + es3;
+      }
+    }
+    var raw = u8.subarray(off, bodyEnd);
+    if (flags & 0x80) raw = unsyncArr(raw);    // tag 级 unsync
+    var end = raw.length, p = 0;
+    var frameHead = ver === 2 ? 6 : 10;
+    while (p + frameHead <= end) {
+      var id, fsize, extra = 0, skip = false;
+      if (ver === 2) {
+        id = String.fromCharCode(raw[p], raw[p + 1], raw[p + 2]);
+        fsize = (raw[p + 3] << 16) | (raw[p + 4] << 8) | raw[p + 5];
+      } else {
+        id = String.fromCharCode(raw[p], raw[p + 1], raw[p + 2], raw[p + 3]);
+        // 帧大小：v2.4 为 synchsafe；v2.2/v2.3 为普通大端整数。
+        // v2.3 大帧（APIC 封面 / USLT 歌词 ≥0x80 字节）若按 synchsafe 读会截断错位
+        fsize = (ver >= 4)
+          ? (((raw[p + 4] & 0x7f) << 21) | ((raw[p + 5] & 0x7f) << 14) | ((raw[p + 6] & 0x7f) << 7) | (raw[p + 7] & 0x7f))
+          : (((raw[p + 4] << 24) | (raw[p + 5] << 16) | (raw[p + 6] << 8) | raw[p + 7]) >>> 0);
+        var ff1 = raw[p + 8], ff2 = raw[p + 9];
+        if (ver >= 4) {
+          if (ff1 & 0x40) extra += 1;          // group id
+          if (ff2 & 0x20) extra += 4;          // data length indicator
+          if (ff1 & 0x20) skip = true;         // 压缩（需 zlib，跳过）
+          if (ff2 & 0x80) skip = true;         // 加密
+          if (ff2 & 0x40) skip = true;         // unsync（帧级去同步）
+        } else {
+          if (ff2 & 0x20) extra += 1;          // v2.3 grouping
+          if (ff2 & 0x80) skip = true;         // 压缩
+          if (ff2 & 0x40) skip = true;         // 加密
+        }
+      }
+      if (fsize <= 0) break;
+      if (skip) { p += frameHead + fsize; continue; }
+      var fstart = p + frameHead + extra;
+      var fend = Math.min(end, fstart + fsize);
+      var fd = raw.subarray(fstart, fend);
+      if (ver === 2) {
+        if (id === 'TT2' || id === 'TP1' || id === 'TAL') {
+          var e2 = fd[0];
+          var t2b = fd.subarray(1);
+          var txt2 = '';
+          try { txt2 = decodeFramesText(e2, t2b); } catch (e) {}
+          txt2 = txt2.replace(/\u0000/g, '').trim();
+          if (id === 'TT2' && !meta.title) meta.title = txt2;
+          else if (id === 'TP1' && !meta.artist) meta.artist = txt2;
+          else if (id === 'TAL' && !meta.album) meta.album = txt2;
+        } else if (id === 'ULT') {
+          var pult = 4;
+          while (pult < fd.length && fd[pult] !== 0) pult++; pult++;
+          try { meta.lrc = decodeFramesText(fd[0], fd.subarray(pult)); } catch (e) {}
+        } else if (id === 'PIC') {
+          var mime22 = '';
+          for (var mi = 1; mi < 4 && mi < fd.length; mi++) mime22 += String.fromCharCode(fd[mi]);
+          var pp2 = 5;                          // enc + mime(3) + pictype(1)
+          while (pp2 < fd.length && fd[pp2] !== 0) pp2++; pp2++;
+          var img2 = fd.subarray(pp2);
+          if (img2.length && !meta.cover) { try { meta.cover = new Blob([img2], { type: normMime(mime22, img2) }); } catch (e) {} }
+        }
+      } else {
+        if (id === 'APIC') {
+          var encA = fd[0];
+          var mimeA = '';
+          var pa = 1;
+          while (pa < fd.length && fd[pa] !== 0) { mimeA += String.fromCharCode(fd[pa]); pa++; }
+          pa++;                                   // null
+          if (pa < fd.length) pa++;               // picture type
+          while (pa < fd.length && fd[pa] !== 0) pa++; pa++;   // description + null
+          var aimg = fd.subarray(pa);
+          if (aimg.length && mimeA !== '-->' && !meta.cover) {
+            try { meta.cover = new Blob([aimg], { type: normMime(mimeA, aimg) }); } catch (e) {}
+          }
+        } else if (id === 'USLT') {
+          var pu = 4;                            // enc + lang(3)
+          while (pu < fd.length && fd[pu] !== 0) pu++; pu++;
+          var lb = fd.subarray(pu);
+          if (!meta.lrc) { try { meta.lrc = decodeFramesText(fd[0], lb); } catch (e) {} }
+        } else if (id === 'TIT2' || id === 'TPE1' || id === 'TALB') {
+          var encT = fd[0];
+          var t3 = fd.subarray(1);
+          var txt3 = '';
+          try { txt3 = decodeFramesText(encT, t3); } catch (e) {}
+          txt3 = txt3.replace(/\u0000/g, '').trim();
+          if (id === 'TIT2' && !meta.title) meta.title = txt3;
+          else if (id === 'TPE1' && !meta.artist) meta.artist = txt3;
+          else if (id === 'TALB' && !meta.album) meta.album = txt3;
+        }
+      }
+      p += frameHead + fsize;
+    }
+    return meta;
+  }
+  function parseFlac(u8, meta) {
+    var off = 4, last = false;
+    while (!last && off + 4 <= u8.length) {
+      var h = (u8[off] << 24) | (u8[off + 1] << 16) | (u8[off + 2] << 8) | u8[off + 3];
+      last = (h & 0x80000000) !== 0;
+      var type = (h >>> 24) & 0x7f;
+      var len = h & 0xffffff;
+      off += 4;
+      var data = u8.subarray(off, off + len);
+      if (type === 4) {                         // VORBIS_COMMENT（FLAC 规范：无 "vorbis" 标识，长度字段为小端序）
+        var vp = 0;
+        // 防御：个别非标工具可能误加了 Ogg 的 "vorbis" 标识，检测到则跳过
+        if (data.length >= 6 && data[0] === 0x76 && data[1] === 0x6f && data[2] === 0x72 &&
+            data[3] === 0x62 && data[4] === 0x69 && data[5] === 0x73) vp = 6;
+        if (vp + 4 > data.length) { off += len; continue; }
+        var vendorLen = (data[vp] | (data[vp + 1] << 8) | (data[vp + 2] << 16) | (data[vp + 3] << 24)) >>> 0;
+        vp += 4 + vendorLen;
+        if (vp + 4 > data.length) { off += len; continue; }
+        var cnt = (data[vp] | (data[vp + 1] << 8) | (data[vp + 2] << 16) | (data[vp + 3] << 24)) >>> 0;
+        vp += 4;
+        for (var c = 0; c < cnt && vp + 4 <= data.length; c++) {
+          var clen = (data[vp] | (data[vp + 1] << 8) | (data[vp + 2] << 16) | (data[vp + 3] << 24)) >>> 0;
+          vp += 4;
+          if (vp + clen > data.length) break;
+          var kv = '';
+          try { kv = new TextDecoder('utf-8').decode(data.subarray(vp, vp + clen)); } catch (e) {}
+          vp += clen;
+          var eq = kv.indexOf('=');
+          if (eq < 0) continue;
+          var key = kv.slice(0, eq).toUpperCase();
+          var val = kv.slice(eq + 1).trim();
+          if (key === 'TITLE' && !meta.title) meta.title = val;
+          else if (key === 'ARTIST' && !meta.artist) meta.artist = val;
+          else if (key === 'ALBUM' && !meta.album) meta.album = val;
+          else if ((key === 'UNSYNCEDLYRICS' || key === 'LYRICS') && !meta.lrc) meta.lrc = val;
+        }
+      } else if (type === 6) {                  // PICTURE
+        var pp = 4;                             // picture type
+        if (pp + 4 > data.length) { off += len; continue; }
+        var mlen = ((data[pp] << 24) | (data[pp + 1] << 16) | (data[pp + 2] << 8) | data[pp + 3]) >>> 0;
+        pp += 4;
+        var mimeF = '';
+        for (var mi2 = 0; mi2 < mlen && pp < data.length; mi2++) mimeF += String.fromCharCode(data[pp]);
+        pp += mlen;
+        if (pp + 4 > data.length) { off += len; continue; }
+        var dlen2 = ((data[pp] << 24) | (data[pp + 1] << 16) | (data[pp + 2] << 8) | data[pp + 3]) >>> 0;
+        pp += 4 + dlen2;
+        pp += 16;                               // width+height+depth+colors
+        if (pp + 4 > data.length) { off += len; continue; }
+        var ilen = ((data[pp] << 24) | (data[pp + 1] << 16) | (data[pp + 2] << 8) | data[pp + 3]) >>> 0;
+        pp += 4;
+        var imgF = data.subarray(pp, pp + ilen);
+        if (imgF.length && !meta.cover) { try { meta.cover = new Blob([imgF], { type: normMime(mimeF, imgF) }); } catch (e) {} }
+      }
+      off += len;
+    }
+    return meta;
+  }
+  function parseMp4(u8, meta) {
+    function walk(start, end, cb) {
+      var o = start;
+      while (o + 8 <= end) {
+        var sz = ((u8[o] << 24) | (u8[o + 1] << 16) | (u8[o + 2] << 8) | u8[o + 3]) >>> 0;
+        var ty = String.fromCharCode(u8[o + 4], u8[o + 5], u8[o + 6], u8[o + 7]);
+        var ds = o + 8;
+        var de = (sz >= 8 && o + sz <= end) ? o + sz : end;
+        cb(ty, ds, de);
+        if (sz < 8) o += 4; else o += sz;
+        if (o >= end) break;
+      }
+    }
+    var ilstIdx = -1;
+    for (var k = 0; k + 4 <= u8.length - 8; k++) {
+      if (u8[k] === 0x69 && u8[k + 1] === 0x6c && u8[k + 2] === 0x73 && u8[k + 3] === 0x74) { ilstIdx = k - 4; break; }
+    }
+    if (ilstIdx < 0) return meta;
+    var ilstEnd = u8.length;
+    var ilstSize = ((u8[ilstIdx] << 24) | (u8[ilstIdx + 1] << 16) | (u8[ilstIdx + 2] << 8) | u8[ilstIdx + 3]) >>> 0;
+    if (ilstSize >= 8 && ilstIdx + ilstSize <= u8.length) ilstEnd = ilstIdx + ilstSize;
+    walk(ilstIdx + 8, ilstEnd, function (ty, ds, de) {
+      var isTxt = ty === '\u00a9nam' || ty === '\u00a9ART' || ty === '\u00a9alb' || ty === '\u00a9lyr';
+      var isCov = ty === 'covr';
+      var inner = ds;
+      while (inner + 8 <= de) {
+        var isz = ((u8[inner] << 24) | (u8[inner + 1] << 16) | (u8[inner + 2] << 8) | u8[inner + 3]) >>> 0;
+        var ity = String.fromCharCode(u8[inner + 4], u8[inner + 5], u8[inner + 6], u8[inner + 7]);
+        var ide = (isz >= 8 && inner + isz <= de) ? inner + isz : de;
+        if (ity === 'data') {
+          var payload = u8.subarray(inner + 16, ide);   // data atom: size(4)+'data'(4)+type(4)+locale(4)+payload
+          if (isCov && !meta.cover) {
+            try { meta.cover = new Blob([payload], { type: normMime('', payload) }); } catch (e) {}
+          } else if (isTxt) {
+            var t2 = '';
+            try { t2 = new TextDecoder('utf-8').decode(payload); } catch (e) {}
+            t2 = t2.replace(/\u0000/g, '').trim();
+            if (ty === '\u00a9nam' && !meta.title) meta.title = t2;
+            else if (ty === '\u00a9ART' && !meta.artist) meta.artist = t2;
+            else if (ty === '\u00a9alb' && !meta.album) meta.album = t2;
+            else if (ty === '\u00a9lyr' && !meta.lrc) meta.lrc = t2;
+          }
+        }
+        if (isz < 8) inner += 4; else inner += isz;
+      }
+    });
+    return meta;
+  }
+  function parseId3v1(u8, meta) {
+    if (u8.length < 128) return meta;
+    var o = u8.length - 128;
+    if (u8[o] !== 0x54 || u8[o + 1] !== 0x41 || u8[o + 2] !== 0x47) return meta;   // "TAG"
+    function latin(a, b) {
+      try { return new TextDecoder('latin1').decode(u8.subarray(a, b)).replace(/\u0000/g, '').trim(); } catch (e) { return ''; }
+    }
+    if (!meta.title) meta.title = latin(o + 3, o + 33);
+    if (!meta.artist) meta.artist = latin(o + 33, o + 63);
+    if (!meta.album) meta.album = latin(o + 63, o + 93);
+    return meta;
+  }
+  function parseAudioMeta(buf) {
+    var u8 = new Uint8Array(buf);
+    var meta = { title: null, artist: null, album: null, cover: null, lrc: null };
+    if (u8.length > 10 && u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33) {
+      meta = parseId3(u8, meta);
+    } else if (u8.length > 4 && u8[0] === 0x66 && u8[1] === 0x4c && u8[2] === 0x61 && u8[3] === 0x43) {
+      meta = parseFlac(u8, meta);
+    } else if (u8.length > 12) {
+      meta = parseMp4(u8, meta);
+    }
+    meta = parseId3v1(u8, meta);
+    return meta;
+  }
+
+  /* LRC 歌词解析：[mm:ss.xx] 行 → [{t: 秒, text}]，按时间排序 */
+  function parseLrc(text) {
+    if (!text || typeof text !== 'string') return [];
+    var lines = [];
+    var re = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+    text.split(/\r?\n/).forEach(function (ln) {
+      // 全局正则有 lastIndex 状态：必须逐行重置，否则从上一行匹配位置起搜，
+      // 偶数行会被整行跳过（歌词隔行丢失）
+      re.lastIndex = 0;
+      var text2 = ln.replace(re, '').trim();
+      var m;
+      while ((m = re.exec(ln)) !== null) {      // 支持一行多个时间戳
+        var t = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        if (m[3]) t += parseInt(m[3], 10) / (m[3].length === 3 ? 1000 : 100);
+        if (text2) lines.push({ t: t, text: text2 });
+      }
+    });
+    lines.sort(function (a, b) { return a.t - b.t; });
+    return lines;
+  }
+
+  function fmtTime(t) {
+    if (!isFinite(t) || t < 0) t = 0;
+    var m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+  function hashName(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+  function drawCover(name) {
+    if (!coverCanvas) return;
+    var cv = coverCanvas, c = cv.getContext('2d');
+    var s = cv.width = cv.height = 52;
+    var item = queue[current];
+    if (item && item.coverUrl) {
+      var img = new Image();
+      img.onload = function () {
+        c.clearRect(0, 0, s, s);
+        c.drawImage(img, 0, 0, s, s);
+      };
+      img.onerror = function () { drawCoverFallback(name, c, s); };
+      img.src = item.coverUrl;
+      return;
+    }
+    drawCoverFallback(name, c, s);
+  }
+  function drawCoverFallback(name, c, s) {
+    var hue = hashName(name || 'Mineradio') % 360;
+    var g = c.createLinearGradient(0, 0, s, s);
+    g.addColorStop(0, 'hsl(' + hue + ',58%,16%)');
+    g.addColorStop(0.55, 'hsl(' + hue + ',68%,28%)');
+    g.addColorStop(1, 'hsl(' + ((hue + 40) % 360) + ',60%,12%)');
+    c.fillStyle = g; c.fillRect(0, 0, s, s);
+    c.save();
+    c.translate(s / 2, s / 2);
+    for (var ring = 1; ring <= 3; ring++) {
+      c.beginPath();
+      c.arc(0, 0, s * (0.16 + ring * 0.15), 0, Math.PI * 2);
+      c.strokeStyle = 'rgba(255,255,255,0.10)';
+      c.lineWidth = 2; c.stroke();
+    }
+    c.beginPath(); c.arc(0, 0, s * 0.14, 0, Math.PI * 2);
+    c.fillStyle = 'rgba(214,248,255,0.9)'; c.fill();
+    c.restore();
+  }
+
+  function renderQueue() {
+    elQlist.innerHTML = '';
+    elQcount.textContent = queue.length + ' 首';
+    queue.forEach(function (item, idx) {
+      var row = document.createElement('div');
+      row.className = 'q-item' + (idx === current ? ' active' : '');
+      var num = document.createElement('span'); num.className = 'q-num'; num.textContent = idx === current ? '▶' : (idx + 1);
+      var name = document.createElement('span'); name.className = 'q-name'; name.textContent = item.name;
+      var x = document.createElement('span'); x.className = 'q-x'; x.textContent = '×';
+      row.appendChild(num); row.appendChild(name); row.appendChild(x);
+      row.addEventListener('click', function (ev) {
+        if (ev.target === x) {
+          dbDelete(queue[idx].key);   // 从音乐库移除
+          queue.splice(idx, 1); if (idx < current) current--; if (idx === current) stopCurrent();
+          renderQueue();
+          if (elQcount) elQcount.textContent = queue.length + ' 首';
+          return;
+        }
+        playAt(idx);
+      });
+      elQlist.appendChild(row);
+    });
+  }
+  function stopCurrent() {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    galaxyPlaying = false;
+    current = -1;
+    elPlay.textContent = '▶';
+    elTitle.textContent = 'Mineradio · 银河电台';
+    elMeta.textContent = '未在播放';
+    elTime.textContent = '0:00 / 0:00';
+    elSeek.value = 0;
+    renderQueue();
+  }
+  function setMeta(name, i, n) {
+    var item = queue[i >= 0 ? i : current] || null;
+    elTitle.textContent = (item && item.title) ? item.title : name;
+    elMeta.textContent = (i >= 0 ? (i + 1) + ' / ' + n + ' · ' : '') +
+      ((item && item.artist) ? item.artist + ' · ' : '') + '本地音乐';
+    drawCover(name);
+  }
+  function playAt(idx) {
+    if (!queue.length) return;
+    if (idx < 0 || idx >= queue.length) idx = 0;
+    current = idx;
+    audio.src = queue[idx].url;
+    setMeta(queue[idx].name, idx, queue.length);
+    renderLrc();
+    renderQueue();
+    // 真实播放状态由 play/pause 事件驱动按钮与银河节奏；
+    // 若浏览器自动播放策略拦截（如导入后自动播），则保持 ▶ 并提示用户点击播放
+    audio.play().then(function () {
+      if (audioCtx && audioCtx.state === 'suspended') { audioCtx.resume().catch(function () {}); }
+    }).catch(function (err) {
+      elPlay.textContent = '▶';
+      galaxyPlaying = false;
+      if (err && err.name === 'NotAllowedError') {
+        elMeta.textContent = '浏览器拦截了自动播放，点击 ▶ 播放';
+      } else {
+        elMeta.textContent = '播放失败：' + (err && err.name ? err.name : '未知错误');
+      }
+    });
+  }
+  function next() {
+    if (!queue.length) return;
+    if (loopMode === 'one' && current >= 0) { audio.currentTime = 0; audio.play().catch(function () {}); return; }
+    var idx;
+    if (shuffleOn && queue.length > 1) {
+      do { idx = Math.floor(Math.random() * queue.length); } while (idx === current);
+    } else {
+      idx = current + 1;
+      if (idx >= queue.length) idx = loopMode === 'all' ? 0 : -1;
+    }
+    if (idx < 0) { stopCurrent(); return; }
+    playAt(idx);
+  }
+  function prev() {
+    if (!queue.length) return;
+    if (audio.currentTime > 3) { audio.currentTime = 0; return; }
+    var idx = current - 1;
+    if (idx < 0) idx = queue.length - 1;
+    playAt(idx);
+  }
+
+  audio.addEventListener('timeupdate', function () {
+    if (seekDragging) return;
+    if (audio.duration && isFinite(audio.duration)) {
+      elSeek.value = Math.round((audio.currentTime / audio.duration) * 1000);
+      elTime.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+    }
+    updateLrcHighlight();
+  });
+  audio.addEventListener('ended', function () { next(); });
+  audio.addEventListener('play', function () { galaxyPlaying = true; elPlay.textContent = '⏸'; });
+  audio.addEventListener('playing', function () { galaxyPlaying = true; elPlay.textContent = '⏸'; });
+  audio.addEventListener('pause', function () { galaxyPlaying = false; elPlay.textContent = '▶'; });
+  audio.addEventListener('error', function () {
+    // 解码/格式错误：若后面还有曲目则跳过，否则停止
+    if (current < 0) return;
+    elMeta.textContent = '无法播放（格式或编码不支持）';
+    if (queue.length > 1) { next(); } else { stopCurrent(); }
+  });
+
+  elSeek.addEventListener('input', function () {
+    seekDragging = true;
+    if (audio.duration && isFinite(audio.duration)) {
+      var t = (Number(elSeek.value) / 1000) * audio.duration;
+      audio.currentTime = t;
+      elTime.textContent = fmtTime(t) + ' / ' + fmtTime(audio.duration);
+    }
+  });
+  elSeek.addEventListener('change', function () { seekDragging = false; });
+  elVol.addEventListener('input', function () { audio.volume = Number(elVol.value) / 100; });
+  document.getElementById('rbtn-play').addEventListener('click', function () {
+    if (current < 0) { if (queue.length) playAt(0); return; }
+    if (audio.paused) audio.play().catch(function () {}); else audio.pause();
+  });
+  document.getElementById('rbtn-prev').addEventListener('click', prev);
+  document.getElementById('rbtn-next').addEventListener('click', next);
+  document.getElementById('rbtn-shuffle').addEventListener('click', function () {
+    shuffleOn = !shuffleOn;
+    elShuffle.classList.toggle('on', shuffleOn);
+    elShuffle.title = shuffleOn ? '随机播放：开' : '随机播放：关';
+  });
+  elLoop.addEventListener('click', function () {
+    loopMode = loopMode === 'off' ? 'all' : (loopMode === 'all' ? 'one' : 'off');
+    elLoop.classList.remove('on');
+    if (loopMode !== 'off') elLoop.classList.add('on');
+    elLoop.title = loopMode === 'off' ? '循环模式：关' : (loopMode === 'all' ? '循环模式：全部' : '循环模式：单曲');
+  });
+
+  /* ---------------- 音乐库持久化（免重复导入） ----------------
+     IndexedDB 'cyril-radio' / store 'tracks'：保存音频 Blob + 封面 + 歌词 + 元数据。
+     再次打开页面自动恢复队列，无需重新导入。 */
+  var radioDB = null;
+  var dbReady = false;
+  var dbQueue = [];
+  function openRadioDB() {
+    if (radioDB) return;
+    try {
+      var req = indexedDB.open('cyril-radio', 1);
+      req.onupgradeneeded = function (ev) {
+        var db = ev.target.result;
+        if (!db.objectStoreNames.contains('tracks')) db.createObjectStore('tracks', { keyPath: 'key' });
+      };
+      req.onsuccess = function (ev) {
+        radioDB = ev.target.result;
+        dbReady = true;
+        loadLibrary();
+      };
+      req.onerror = function () { /* IndexedDB 不可用时静默降级为会话内队列 */ };
+    } catch (e) { /* 降级 */ }
+  }
+  function dbPut(rec) {
+    if (!radioDB) return;
+    try {
+      var tx = radioDB.transaction('tracks', 'readwrite');
+      tx.objectStore('tracks').put(rec);
+    } catch (e) {}
+  }
+  /* 合并更新某条曲目记录：读旧记录→覆盖补丁字段→写回，
+     避免只传 lrc 时把已存的音频 blob 覆写成 null（刷新后曲目丢失） */
+  function dbMerge(key, patch) {
+    if (!radioDB || !key) return;
+    try {
+      var tx = radioDB.transaction('tracks', 'readwrite');
+      var store = tx.objectStore('tracks');
+      var req = store.get(key);
+      req.onsuccess = function () {
+        var old = req.result || {};
+        var merged = {};
+        for (var k in old) merged[k] = old[k];
+        for (var k2 in patch) merged[k2] = patch[k2];
+        store.put(merged);
+      };
+    } catch (e) {}
+  }
+  function dbDelete(key) {
+    if (!radioDB || !key) return;
+    try {
+      var tx = radioDB.transaction('tracks', 'readwrite');
+      tx.objectStore('tracks').delete(key);
+    } catch (e) {}
+  }
+  function trackKey(f) { return (f.name || '') + '|' + (f.size || 0) + '|' + (f.lastModified || 0); }
+  function loadLibrary() {
+    if (!radioDB) return;
+    try {
+      var tx = radioDB.transaction('tracks', 'readonly');
+      var req = tx.objectStore('tracks').getAll();
+      req.onsuccess = function () {
+        (req.result || []).forEach(function (rec) {
+          if (!rec || !rec.blob) return;
+          var item = {
+            key: rec.key,
+            name: rec.name || '未知曲目',
+            url: URL.createObjectURL(rec.blob),
+            coverUrl: rec.coverBlob ? URL.createObjectURL(rec.coverBlob) : null,
+            coverBlob: rec.coverBlob || null,
+            lrc: rec.lrc || null,
+            lrcLines: parseLrc(rec.lrc),
+            title: rec.title || null,
+            artist: rec.artist || null,
+            album: rec.album || null
+          };
+          queue.push(item);
+          // 旧版本（解析器修复前）导入的记录：封面/歌词/标签存的是 null。
+          // 用音频 blob 头部重新解析一次并合并回库，刷新即补全，无需重新导入。
+          if (!rec.coverBlob && !rec.lrc && !rec.metaTried) reparsingMeta(item, rec);
+        });
+        renderQueue();
+        if (queue.length) elMeta.textContent = '已恢复音乐库 ' + queue.length + ' 首，点击 ▶ 开始播放';
+      };
+    } catch (e) {}
+  }
+
+  /* 从音频 blob 头部重新解析元数据（只读前 300KB，开销极小）：
+     修复旧版本导入记录缺失的 封面/标题/艺术家/内嵌歌词 */
+  function reparsingMeta(item, rec) {
+    if (!rec.blob || !rec.blob.slice) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var changed = false;
+      try {
+        var meta = parseAudioMeta(fr.result);
+        if (meta.title && !item.title) { item.title = meta.title; changed = true; }
+        if (meta.artist && !item.artist) { item.artist = meta.artist; changed = true; }
+        if (meta.album && !item.album) { item.album = meta.album; changed = true; }
+        if (meta.cover && !item.coverBlob) {
+          item.coverBlob = meta.cover;
+          item.coverUrl = URL.createObjectURL(meta.cover);
+          changed = true;
+        }
+        if (meta.lrc && !item.lrc) {
+          item.lrc = meta.lrc;
+          item.lrcLines = parseLrc(meta.lrc);
+          changed = true;
+        }
+      } catch (e) {}
+      // 无论是否解析到内容都打上 metaTried 标记，避免无标签曲目每次加载都重解析
+      dbMerge(item.key, { title: item.title, artist: item.artist, album: item.album,
+                          coverBlob: item.coverBlob, lrc: item.lrc, metaTried: true });
+      if (changed) {
+        renderQueue();
+        if (queue.length) elMeta.textContent = '已恢复音乐库 ' + queue.length + ' 首（已补全封面/歌词），点击 ▶ 开始播放';
+      }
+    };
+    fr.readAsArrayBuffer(rec.blob.slice(0, 300000));
+  }
+
+  /* ---------------- 歌词面板 ---------------- */
+  var elLyrics = document.getElementById('radio-lyrics');
+  var elLyricsBody = document.getElementById('radio-lyrics-body');
+  var elLcount = document.getElementById('radio-lcount');
+  var curLrc = [];
+  function renderLrc() {
+    var item = queue[current];
+    curLrc = item ? (item.lrcLines || []) : [];
+    if (!elLyrics) return;
+    if (!curLrc.length) {
+      elLyricsBody.innerHTML = '<div class="l-empty">暂无歌词<br>可将同名 .lrc 文件与音乐一同导入（或使用内嵌歌词）</div>';
+      if (elLcount) elLcount.textContent = '无';
+      return;
+    }
+    elLyricsBody.innerHTML = '';
+    curLrc.forEach(function (ln, i) {
+      var d = document.createElement('div');
+      d.className = 'l-line';
+      d.textContent = ln.text;
+      d.setAttribute('data-lidx', i);
+      elLyricsBody.appendChild(d);
+    });
+    if (elLcount) elLcount.textContent = curLrc.length + ' 行';
+  }
+  function updateLrcHighlight() {
+    if (!elLyricsBody || !elLyricsBody.querySelector('.l-line')) return;
+    var t = audio.currentTime || 0;
+    var idx = -1;
+    for (var i = 0; i < curLrc.length; i++) { if (curLrc[i].t <= t) idx = i; else break; }
+    var prev = elLyricsBody.querySelector('.l-line.active');
+    if (prev && prev.getAttribute('data-lidx') !== String(idx)) prev.classList.remove('active');
+    if (idx >= 0) {
+      var cur = elLyricsBody.querySelector('.l-line[data-lidx="' + idx + '"]');
+      if (cur && !cur.classList.contains('active')) {
+        cur.classList.add('active');
+        try { cur.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+      }
+    }
+  }
+
+  /* ---------------- 均衡器 3D 可视化（等距立体频谱柱） ---------------- */
+  var elEqViz = document.getElementById('radio-eq-viz');
+  var eqVizCtx = elEqViz ? elEqViz.getContext('2d') : null;
+  var eqVizHandle = 0;
+  /* 立体声滑块（Width / Balance） */
+  var elEqWidth = document.getElementById('eq-width');
+  var elEqWidthVal = document.getElementById('eq-width-val');
+  var elEqBal = document.getElementById('eq-balance');
+  var elEqBalVal = document.getElementById('eq-balance-val');
+  if (elEqWidth) elEqWidth.addEventListener('input', function () {
+    var w = Number(elEqWidth.value);
+    if (elEqWidthVal) elEqWidthVal.textContent = w.toFixed(2);
+    if (eqWidthNode) eqWidthNode.gain.value = w;
+  });
+  if (elEqBal) elEqBal.addEventListener('input', function () {
+    var b = Number(elEqBal.value);
+    if (elEqBalVal) elEqBalVal.textContent = b.toFixed(2);
+    if (eqBalanceNode) eqBalanceNode.pan.value = b;
+  });
+  function sizeEqViz() {
+    if (!elEqViz || !eqVizCtx) return;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var w = elEqViz.clientWidth || 320;
+    elEqViz.width = Math.round(w * dpr);
+    elEqViz.height = Math.round(96 * dpr);
+    eqVizCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function _quad(ctx, p1, p2, p3, p4) {
+    ctx.beginPath();
+    ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]);
+    ctx.lineTo(p3[0], p3[1]); ctx.lineTo(p4[0], p4[1]);
+    ctx.closePath(); ctx.fill();
+  }
+  function drawEq3D() {
+    if (!elEq || !elEq.classList.contains('show') || !eqVizCtx) { eqVizHandle = 0; return; }
+    eqVizHandle = requestAnimationFrame(drawEq3D);
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var W = elEqViz.width / dpr, H = elEqViz.height / dpr;
+    var ctx = eqVizCtx;
+    ctx.clearRect(0, 0, W, H);
+    var data = null;
+    if (analyser && freqData) { analyser.getByteFrequencyData(freqData); data = freqData; }
+    var NB = 22;
+    var spacing = Math.min(17, W / (NB + 2));
+    var bw = spacing * 0.60, dep = spacing * 0.32;
+    var gy = H - 14;
+    var cx0 = W / 2;
+    // 底部地平线
+    var grad = ctx.createLinearGradient(0, gy, 0, H);
+    grad.addColorStop(0, 'rgba(156,255,223,0.14)');
+    grad.addColorStop(1, 'rgba(156,255,223,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, gy, W, H - gy);
+    for (var i = 0; i < NB; i++) {
+      var v = 0;
+      if (data) {
+        var idx = Math.min(data.length - 1, Math.floor(i * data.length * 0.55 / NB));
+        v = data[idx] / 255;
+      }
+      var h = Math.max(3, v * (H - 46));
+      var cx = cx0 + (i - (NB - 1) / 2) * spacing;
+      var ty = gy - h;
+      var A = [cx - bw, ty], B = [cx, ty - dep], C = [cx + bw, ty], D = [cx, ty + dep];
+      var A2 = [cx - bw, gy], B2 = [cx, gy - dep], C2 = [cx + bw, gy], D2 = [cx, gy + dep];
+      var r = Math.round(0 + 255 * v), g = Math.round(245 + (240 - 245) * v), b = Math.round(212 + (184 - 212) * v);
+      ctx.fillStyle = 'rgba(' + Math.round(r * 0.42) + ',' + Math.round(g * 0.42) + ',' + Math.round(b * 0.42) + ',0.85)';
+      _quad(ctx, A, A2, D2, D);   // 左面（暗）
+      ctx.fillStyle = 'rgba(' + Math.round(r * 0.70) + ',' + Math.round(g * 0.70) + ',' + Math.round(b * 0.70) + ',0.9)';
+      _quad(ctx, C, C2, D2, D);   // 右面（中）
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.95)';
+      _quad(ctx, A, B, C, D);     // 顶面（亮）
+    }
+  }
+  function startEqViz() {
+    if (!eqVizCtx || eqVizHandle) return;
+    sizeEqViz();
+    drawEq3D();
+  }
+
+  /* ---------------- 均衡器面板 ---------------- */
+  var elEq = document.getElementById('radio-eq');
+  var elEqBody = document.getElementById('radio-eq-body');
+  var elEqToggle = document.getElementById('rbtn-eq-toggle');
+  function buildEqPanel() {
+    if (!elEqBody) return;
+    elEqBody.innerHTML = '';
+    EQ_BANDS.forEach(function (f, i) {
+      // 增益行
+      var row = document.createElement('div');
+      row.className = 'eq-row';
+      var lab = document.createElement('span'); lab.className = 'eq-freq'; lab.textContent = (f >= 1000 ? (f / 1000) + 'k' : f) + 'Hz';
+      var inp = document.createElement('input');
+      inp.type = 'range'; inp.min = -12; inp.max = 12; inp.step = 1; inp.value = eqGains[i];
+      var val = document.createElement('span'); val.className = 'eq-val'; val.textContent = eqGains[i];
+      inp.addEventListener('input', function () {
+        var g = Number(inp.value);
+        eqGains[i] = g;
+        val.textContent = (g > 0 ? '+' : '') + g;
+        if (eqFilters[i] && eqOn) eqFilters[i].gain.value = g;
+      });
+      row.appendChild(lab); row.appendChild(inp); row.appendChild(val);
+      elEqBody.appendChild(row);
+      // Q 值行（带宽，0.4~8）
+      var qrow = document.createElement('div');
+      qrow.className = 'eq-row eq-qrow';
+      var qlab = document.createElement('span'); qlab.className = 'eq-q'; qlab.textContent = 'Q';
+      var qinp = document.createElement('input');
+      qinp.type = 'range'; qinp.min = 0.4; qinp.max = 8; qinp.step = 0.1; qinp.value = eqQs[i];
+      var qval = document.createElement('span'); qval.className = 'eq-qval'; qval.textContent = eqQs[i].toFixed(1);
+      qinp.addEventListener('input', function () {
+        var q = Number(qinp.value);
+        eqQs[i] = q;
+        qval.textContent = q.toFixed(1);
+        if (eqFilters[i]) eqFilters[i].Q.value = q;
+      });
+      qrow.appendChild(qlab); qrow.appendChild(qinp); qrow.appendChild(qval);
+      elEqBody.appendChild(qrow);
+    });
+    sizeEqViz();
+  }
+  function setEqOn(on) {
+    eqOn = on;
+    if (elEqToggle) {
+      elEqToggle.textContent = on ? '开' : '关';
+      elEqToggle.classList.toggle('off', !on);
+    }
+    eqFilters.forEach(function (f, i) { if (f) f.gain.value = on ? eqGains[i] : 0; });
+  }
+
+  /* 浮层互斥：队列 / 歌词 / EQ 同开一个 */
+  function showPanel(name) {
+    var panels = { queue: elQueue, lyrics: elLyrics, eq: elEq };
+    Object.keys(panels).forEach(function (k) {
+      if (panels[k] && k !== name) panels[k].classList.remove('show');
+    });
+    if (name && panels[name]) {
+      var willShow = !panels[name].classList.contains('show');
+      panels[name].classList.toggle('show');
+      if (name === 'eq' && willShow) startEqViz();   // 展开 EQ 时启动 3D 可视化
+    }
+  }
+
+  var fileInput = document.getElementById('radio-files');
+  document.getElementById('btnRadioImport').addEventListener('click', function () { fileInput.click(); });
+  document.getElementById('rbtn-import').addEventListener('click', function () { fileInput.click(); });
+  document.getElementById('rbtn-queue').addEventListener('click', function () { showPanel('queue'); });
+  document.getElementById('rbtn-lyrics').addEventListener('click', function () { showPanel('lyrics'); });
+  document.getElementById('rbtn-eq').addEventListener('click', function () { showPanel('eq'); });
+  if (elEqToggle) elEqToggle.addEventListener('click', function () { setEqOn(!eqOn); });
+
+  function handleAudioFile(f, cb) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var meta = parseAudioMeta(reader.result);
+      var item = {
+        key: trackKey(f),
+        name: f.name.replace(/\.[^.]+$/, ''),
+        url: URL.createObjectURL(f),
+        coverBlob: meta.cover || null,
+        coverUrl: meta.cover ? URL.createObjectURL(meta.cover) : null,
+        lrc: meta.lrc || null,
+        lrcLines: parseLrc(meta.lrc),
+        title: meta.title || null,
+        artist: meta.artist || null,
+        album: meta.album || null
+      };
+      cb(item);
+      dbPut({ key: item.key, name: f.name.replace(/\.[^.]+$/, ''), blob: f, coverBlob: item.coverBlob, lrc: item.lrc, title: item.title, artist: item.artist, album: item.album });
+    };
+    reader.onerror = function () { cb(null); };
+    reader.readAsArrayBuffer(f);
+  }
+  /* 给队列曲目附加歌词：更新内存对象 + 合并写回 IndexedDB（保留原音频 blob） */
+  function attachLrc(item, text) {
+    item.lrc = text;
+    item.lrcLines = parseLrc(text);
+    if (item.key) dbMerge(item.key, { name: item.name, lrc: text, title: item.title, artist: item.artist, album: item.album });
+  }
+
+  fileInput.addEventListener('change', function () {
+    var files = Array.prototype.slice.call(this.files || []);
+    var pending = 0, added = 0, lrcAdded = 0;
+    var lrcPending = [];   // 尚未匹配到的 .lrc：等批量音频全部解析完再统一匹配
+    function flushLrcPending() {
+      if (!lrcPending.length) return;
+      var rest = [];
+      lrcPending.forEach(function (lp) {
+        var base = lp.name.replace(/\.lrc$/i, '').toLowerCase();
+        var hit = false;
+        queue.forEach(function (item) {
+          if (item.name.toLowerCase() === base && !item.lrcLines.length) {
+            attachLrc(item, lp.text);
+            lrcAdded++;
+            hit = true;
+          }
+        });
+        if (!hit) rest.push(lp);
+      });
+      if (rest.length) elMeta.textContent = '歌词文件未匹配到曲目：' + rest.map(function (r) { return r.name; }).join('、');
+      lrcPending = rest;
+    }
+    files.forEach(function (f) {
+      if (/\.lrc$/i.test(f.name)) {
+        // LRC 歌词文件：先尝试匹配队列中已有同名曲目（去掉扩展名）；
+        // 没匹配到就缓冲，等本批音频导入完成后再试（避免大音频 FileReader 慢、
+        // 小 lrc 先读完时音频还没进队列而匹配失败）
+        var base = f.name.replace(/\.lrc$/i, '').toLowerCase();
+        var fr = new FileReader();
+        fr.onload = function () {
+          var text = String(fr.result || '');
+          var hit = false;
+          queue.forEach(function (item) {
+            if (item.name.toLowerCase() === base && !item.lrcLines.length) {
+              attachLrc(item, text);
+              lrcAdded++;
+              hit = true;
+            }
+          });
+          if (!hit) lrcPending.push({ name: f.name, text: text });
+          if (pending === 0) flushLrcPending();
+        };
+        fr.readAsText(f, 'utf-8');
+        return;
+      }
+      if (!/^audio\//.test(f.type) && !/\.(mp3|flac|m4a|m4b|wav|ogg|oga|aac|opus|webm|weba|aiff|ape|dsf|mp2)$/i.test(f.name)) return;
+      var k = trackKey(f);
+      if (queue.some(function (it) { return it.key === k; })) return;   // 已导入，跳过
+      pending++;
+      handleAudioFile(f, function (item) {
+        pending--;
+        if (!item) return;
+        queue.push(item);
+        added++;
+        if (pending === 0) {
+          flushLrcPending();
+          renderQueue();
+          elMeta.textContent = '已导入 ' + added + ' 首' + (lrcAdded ? '，歌词 ' + lrcAdded + ' 份' : '') + '（共 ' + queue.length + ' 首），点击 ▶ 开始播放';
+        }
+      });
+    });
+    if (!pending && !added && !lrcAdded && !lrcPending.length) elMeta.textContent = '没有可导入的音频文件';
+    this.value = '';
+  });
+
+  /* ---------------- 终端 ↔ 电台 切换入口（终端保留，银河只是背景） ---------------- */
+  btnMode.addEventListener('click', function () {
+    if (mode === 'kali') {
+      mode = 'radio';
+      btnMode.textContent = '终端';
+      btnMode.classList.add('active');
+      // 不隐藏终端：只切换背景层与浮层，终端保持可见可操作
+      document.body.classList.add('radio-on');
+      radioEl.classList.add('show');
+      radioEl.setAttribute('aria-hidden', 'false');
+      if (bgMode === 'lumiere') document.body.classList.add('lumiere-on');
+      startBackground();
+      renderQueue();
+      renderLrc();
+      elMeta.textContent = queue.length ? ('共 ' + queue.length + ' 首') : '点击「＋」或顶栏「电台导入」载入本地音乐';
+      if (window.__cyrilApplyTheme) window.__cyrilApplyTheme();   // 终端透明，透出银河
+      setTimeout(function () { if (window.__cyrilRefit) window.__cyrilRefit(); }, 60);
+      syncLumiereBtn();
+    } else {
+      mode = 'kali';
+      btnMode.textContent = 'Mineradio';
+      btnMode.classList.remove('active');
+      document.body.classList.remove('radio-on');
+      radioEl.classList.remove('show');
+      radioEl.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('lumiere-on');
+      stopBackground();
+      if (window.__cyrilApplyTheme) window.__cyrilApplyTheme();   // 恢复主题背景
+      setTimeout(function () { if (window.__cyrilRefit) window.__cyrilRefit(); }, 60);
+      syncLumiereBtn();
+      var ta = termEl.querySelector('textarea');
+      if (ta) ta.focus();
+    }
+  });
+  window.addEventListener('resize', function () {
+    if (mode === 'radio') {
+      resizeGalaxy();
+      if (window.Lumiere) Lumiere.resize();
+    }
+    if (elEq && elEq.classList.contains('show')) sizeEqViz();
+  });
+
+  /* ---------------- 浮层面板可拖动（mineradio 桌面歌词同款：按住标题栏移动）
+     使用 Pointer Events 统一鼠标 + 触屏（手机拖动） ---------------- */
+  function makeDraggable(panel, head) {
+    if (!panel || !head) return;
+    var drag = null;
+    function down(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target && e.target.closest && e.target.closest('button')) return;   // 标题栏内按钮不触发拖动
+      var r = panel.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+      try { head.setPointerCapture(e.pointerId); } catch (err) {}
+      head.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+    function move(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var x = Math.max(4, Math.min(window.innerWidth - panel.offsetWidth - 4, e.clientX - drag.dx));
+      var y = Math.max(4, Math.min(window.innerHeight - panel.offsetHeight - 4, e.clientY - drag.dy));
+      panel.style.left = x + 'px';
+      panel.style.top = y + 'px';
+      panel.style.right = 'auto';
+    }
+    function up(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      head.style.cursor = '';
+      try { head.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    head.addEventListener('pointerdown', down);
+    head.addEventListener('pointermove', move);
+    head.addEventListener('pointerup', up);
+    head.addEventListener('pointercancel', up);
+  }
+  makeDraggable(document.getElementById('radio-lyrics'), document.getElementById('radio-lyrics-head'));
+  makeDraggable(document.getElementById('radio-eq'), document.getElementById('radio-eq-head'));
+
+  /* ---------------- 初始化：均衡器面板 + 音乐库自动恢复（免重复导入） ---------------- */
+  buildEqPanel();
+  setEqOn(true);
+  openRadioDB();
+})();
+</script>
+</body>
+</html>

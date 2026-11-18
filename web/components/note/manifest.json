@@ -1,0 +1,11 @@
+{
+  "id": "note",
+  "name": "便签",
+  "desc": "随手记，内容存浏览器本地",
+  "version": "1.0",
+  "author": "Cyril",
+  "script": "index.js",
+  "style": "index.css",
+  "width": 166,
+  "height": 0
+}

@@ -1,0 +1,7 @@
+﻿生成时间: 2026-11-17 10:23:28
+待删除文件: 120 个
+待删除合计: 11.35 GB (12191475841 字节)
+保留文件:
+System.Object[]
+
+清单: D:\Terminal-Windows\_maintenance\20261117\delete-manifest.csv

@@ -1,0 +1,17 @@
+2026-11-17 便携版清理记录
+
+CE693DCE59529F453CF1DB23E8C81B4EB21179A0F3E3740317B47A36D2ECF089  D:\Terminal-Windows\dist\WebTerm.exe.prev7  241.9 MB
+7B02918277CA5A9537D892BC536A09946C2C84E2B2AB6F9936F40FF5732121E1  D:\Terminal-Windows\electron-dist\WebTerm-Electron-win32-x64\resources\WebTerm.exe.prev11  241.9 MB
+575F165A3D110E96391FA91917BDF786EA6B08FFBA78D051D6BA3C4565BD815B  D:\Terminal-Windows\electron-dist\WebTerm-Electron-win32-x64\resources\WebTerm.exe.new  189.5 MB
+
+已删除目录:
+  C:\Users\Cuisi\AppData\Local\WebTerm-Portable (便携缓存, 550.1 MB)
+  D:\Terminal-Windows\_build\20261117\WebTerm-Portable-1.0.4.7z (309.8 MB, SHA256 F2B643475793A04594BDADE2863AD901DE2B9FBADBF006E0D892A14441905A0E)
+  D:\Terminal-Windows\installer\WebTerm-Portable-1.0.4-Single.exe (311.8 MB, SHA256 8AEF7C3EB1FC14DD3C08A6748DF74BF24BD96F32C48656156B8CFF4853711511)
+  D:\Terminal-Windows\_build\20261117\single-exe (构建目录, 311.8 MB)
+  D:\Terminal-Windows\_build\20261117\iexpress-test (IExpress 测试, 0.3 MB)
+  D:\Terminal-Windows\electron-dist\_rebuild-20261117 (重复 Electron 构建, 548.2 MB)
+  D:\Terminal-Windows\build (PyInstaller 缓存, 246.0 MB)
+  D:\Terminal-Windows\_cdp13 (CDP 测试配置, 28.9 MB)
+
+保留: electron-dist\WebTerm-Electron-win32-x64 旧便携应用主体（仍在运行，未删除）

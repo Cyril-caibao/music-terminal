@@ -1,0 +1,6 @@
+# WebTerm 1.0.7 (2026-11-18)
+# 第三轮：移植凝彩｜第四轮：歌词原文｜第五轮：译文条+全屏修复｜第六轮：去白框+译文开关+终端指令
+9d7127cc5bf64db9110e561dc43722a38201da2c0a0464fb8818f269d25809b0  dist/WebTerm.exe                            198884742
+921e138d5e79894a80410bdc5f18ecf5b62ebf6b1b559feb238cb17f4732f58b  installer/WebTerm-Electron-Setup-1.0.7.exe   355165696
+0ae60c246beb21d654238c5d4d494916e875e4c84768db30272ca12f61eba7bc  installer/WebTerm-1.0.7-full.nupkg          354333127
+# nupkg 内 lib/net45/resources/WebTerm.exe = 9d7127cc…（已核对，198,884,742 B）

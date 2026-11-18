@@ -1,0 +1,30 @@
+# ---- build artifacts / large binaries (GitHub 100MB limit) ----
+dist/
+build/
+electron-dist/
+electron-tools/
+installer/
+llama/
+
+# vendored python/PIL/UPX toolchain (rebuildable, 278M)
+components/cyrilshield/vendor/
+components/cyrilshield/.work/
+
+# ---- runtime data & local secrets ----
+lxmusic-data/
+users.json
+*.log
+_chrome13.log
+_srv8861.log
+
+# ---- python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- node ----
+node_modules/
+
+# ---- OS ----
+Thumbs.db
+.DS_Store

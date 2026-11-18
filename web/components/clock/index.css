@@ -1,0 +1,7 @@
+/* 组件样式：只用 var(--cy-*)，深底 / 浅底两套主题会自动跟着变 */
+.clock { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.clock-t {
+  font-size: 13px; font-weight: normal; color: var(--cy-text);
+  font-variant-numeric: tabular-nums; letter-spacing: .5px;
+}
+.clock-d { font-size: 8px; color: var(--cy-dim); white-space: nowrap; }
