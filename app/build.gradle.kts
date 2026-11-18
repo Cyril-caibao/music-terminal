@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,8 +15,8 @@ android {
         applicationId = "com.multitrack.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 64
-        versionName = "3.51"
+        versionCode = 65
+        versionName = "3.52"
 
         ndk {
             // ONNX Runtime 的 .so 按 ABI 分；只留手机真正会用的两个，
@@ -25,7 +27,7 @@ android {
 
     // 签名信息从 signing.properties 读（不入库）：公开仓库不带密钥库与密码。
     // 没有这两个文件的机器照常构建 debug；release 构建会落到 unsigned。
-    val signingProps = java.util.Properties().apply {
+    val signingProps = Properties().apply {
         val f = rootProject.file("signing.properties")
         if (f.exists()) f.inputStream().use { load(it) }
     }

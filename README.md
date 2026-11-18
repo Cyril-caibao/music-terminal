@@ -27,11 +27,23 @@
   标签编辑直接写进音频文件本体（其它播放器也能读到）；歌词支持 LRC；
 - **电平表**：L/R 双声道 + 过载锁存灯，表与播放白线共用同一个时钟（0dBFS 进 = 0dBFS 出，
   与 Audition 等工具读数一致）；
-- 140 项单元测试（含 DeepFilterNet3 真权重集成测试与像素回归），详见下方版本历史与验证清单。
+- 149 项单元测试（含 DeepFilterNet3 真权重集成测试与像素回归），详见下方版本历史与验证清单。
 
 ---
 
 ## 版本历史
+
+### 3.52 的改动
+
+资料库右上角新增 **⚙ 扫描设置**（「歌曲库及标签」）：
+
+- **需扫描的文件夹 / 已排除的文件夹**：二级页 + 添加对话框（可搜曲库已知目录，也可直接输入路径）；
+- **两个排除项全局生效**：过滤只发生在扫描入口 —— 被排除的文件根本不进曲库，
+  播放 / 文件夹 / 专辑 / 歌手 / 队列自然全部看不到；改完设置自动触发重扫清掉已有条目；
+- **排除短时长的文件**：mm:ss 对话框，空或 0:0 不排除任何文件；
+- **使用 folder.jpg、cover.jpg 等文件**：内嵌封面缺失时回退到目录里的标准名图片，开关一键关掉；
+- **信息**：支持的文件类型、存储设备；
+- 目录比较**不区分大小写**（Android 存储 FAT/exFAT 本来就不敏感，这条由测试钉住）。
 
 ### 3.51 的改动
 
@@ -226,7 +238,7 @@ checkpoint（官方论文没放、HF/ModelScope 也没有），所以这一档�
 
 ## 验证
 
-**140 项单测 0 失败**（119 → 127 是 DFN3 的 8 项；127 → 133 是 3.50 的 6 项；133 → 140 是 3.51 的 7 项，含 MixLevelTest）：
+**149 项单测 0 失败**（119 → 127 DFN3 的 8 项；127 → 133 是 3.50；133 → 140 是 3.51；140 → 149 是 3.52 的 9 项，含 ScanFilter 8 项）：
 
 | 新增断言 | 盯的事故 |
 |---|---|
@@ -251,6 +263,9 @@ checkpoint（官方论文没放、HF/ModelScope 也没有），所以这一档�
 | 0dBFS 立体声过总线后仍 0dBFS（pan 法则只作用一次） | 双层 pan 相乘白扣 6dB |
 | 硬左时 L=1.0 / R=0.0，不是 0.707/0 | 等功率法则用在平衡旋钮上 |
 | meterStep 单调不回升、表底 −60dB | 回落速度算成负数导致表往上走 |
+| 排除目录的子目录一并排除、排除优先于扫描根 | 只排一层，子目录的歌漏进来 |
+| /Music 与 /music 算同一目录、MusicBackup 不算前缀误伤 | 大小写 / 相似名误判 |
+| 设置页三组行的排版截图（Paparazzi） | 副标题被截 / 开关压住文字 |
 
 `apksigner verify` 通过（CN=CyrilMusic），`versionCode 62 / versionName 3.49`。
 
@@ -348,7 +363,7 @@ export JAVA_HOME=/path/to/jdk17+   # 21 也可以（AGP 8.5 + Gradle 8.7）
 
 - AGP 8.x + Kotlin 1.9.24 + Compose BOM 2024.06.00 + Media3 1.4.1 + androidx.media 1.7.0，`compileSdk 35 / minSdk 24`；
 - 签名信息读本机 `signing.properties`（不入库）；没有密钥的机器照常构建 debug；
-- 单测：`./gradlew :app:testReleaseUnitTest`，共 140 项（含 DeepFilterNet3 真权重集成测试、MixLevelTest 混音增益校准，
+- 单测：`./gradlew :app:testReleaseUnitTest`，共 149 项（含 DeepFilterNet3 真权重集成测试、MixLevelTest 混音增益校准、ScanFilter 排除语义，
   它读 `app/src/test/resources/dfn3/` 下的对照素材，不依赖网络）。
 
 ## 权限

@@ -12,6 +12,7 @@ import com.multitrack.app.player.data.MediaScanner
 import com.multitrack.app.player.data.PlayerDb
 import com.multitrack.app.player.data.QueueRepository
 import com.multitrack.app.player.data.LyricsRepository
+import com.multitrack.app.player.data.ScanSettingsStore
 import com.multitrack.app.player.data.TagWriter
 import com.multitrack.app.player.playback.PlaybackManager
 import kotlinx.coroutines.CoroutineScope
@@ -78,6 +79,7 @@ class AppContainer(private val app: Application) {
     val lyrics: LyricsRepository by lazy { LyricsRepository(app) }
     val playback: PlaybackManager by lazy { PlaybackManager(app, queueRepo, scope) }
     private val scanner: MediaScanner by lazy { MediaScanner(app, db.songDao(), db.folderDao()) }
+    val scanSettings: ScanSettingsStore by lazy { ScanSettingsStore(app) }
 
     private val _scan = MutableStateFlow(ScanUi())
     val scan: StateFlow<ScanUi> = _scan.asStateFlow()

@@ -25,7 +25,7 @@ import com.multitrack.app.player.data.SongEntity
 import java.io.File
 
 /** 界面上要能看到版本号：装没装上新包，一眼就能确认 */
-const val APP_VERSION = "3.51"
+const val APP_VERSION = "3.52"
 
 /** 播放器配色：纯黑底 + 青绿强调，来自 Musicolet 截图。 */
 object PColors {

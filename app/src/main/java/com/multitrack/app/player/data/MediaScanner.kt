@@ -18,9 +18,12 @@ class MediaScanner(
     private val folderDao: FolderDao
 ) {
 
-    suspend fun scan(minSeconds: Int = 1, onStep: (String) -> Unit = {}): Int = withContext(Dispatchers.IO) {
+    suspend fun scan(onStep: (String) -> Unit = {}): Int = withContext(Dispatchers.IO) {
+        // 排除项全局生效的唯一落点：这里过滤掉的文件根本不会进曲库，
+        // 播放页 / 文件夹 / 专辑 / 歌手 / 队列自然全部看不到。改设置后重扫一遍即可。
+        val opts = ScanSettingsStore(context).load()
         onStep("读取媒体库…")
-        val found = queryMediaStore(minSeconds)
+        val found = queryMediaStore(opts)
         onStep("比对索引…")
 
         val existing = songDao.pathMeta().associateBy { it.path }
@@ -46,7 +49,7 @@ class MediaScanner(
         found.size
     }
 
-    private fun queryMediaStore(minSeconds: Int): List<SongEntity> {
+    private fun queryMediaStore(opts: ScanSettingsStore.Options): List<SongEntity> {
         val cols = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.DATA,
@@ -83,7 +86,8 @@ class MediaScanner(
             while (c.moveToNext()) {
                 val path = c.getString(iData) ?: continue
                 val dur = c.getLong(iDur)
-                if (dur < minSeconds * 1000L) continue
+                if (dur < opts.minDurationSec * 1000L) continue
+                if (!ScanFilter.includePath(path, opts.scanRoots, opts.excludeDirs)) continue
                 if (!seenPath.add(path)) continue
                 val id = c.getLong(iId)
                 val dir = path.substringBeforeLast('/', "")

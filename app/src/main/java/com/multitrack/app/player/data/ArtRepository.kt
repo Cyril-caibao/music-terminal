@@ -85,6 +85,21 @@ class ArtRepository(private val context: Context) {
         }
     }
 
+    /**
+     * 全量失效：关掉「使用 folder.jpg、cover.jpg 等文件」这类影响所有歌的开关后调用，
+     * 否则已经落盘的 sidecar 缓存图还会一直显示。
+     */
+    suspend fun invalidateAll() = withContext(Dispatchers.IO) {
+        lock.withLock {
+            memo.clear()
+            runCatching {
+                dir.listFiles()?.forEach { it.delete() }
+            }
+            revision += 1
+            Unit
+        }
+    }
+
     /** 把用户选的图片存成本地封面（只影响本 App 的显示，不需要改文件） */
     suspend fun setCustomCover(songId: Long, uri: Uri): Boolean = withContext(Dispatchers.IO) {
         lock.withLock {
@@ -155,6 +170,9 @@ class ArtRepository(private val context: Context) {
      * 以前那两版就是因为这条兜底，把相册里随手拍的照片、下载目录里的截图统统贴到了歌上。
      */
     private fun sidecarBitmap(song: SongEntity): Bitmap? {
+        // 设置里的「使用 folder.jpg、cover.jpg 等文件」开关：关掉就只认内嵌封面，
+        // 不再回退到目录里的标准名图片
+        if (!ScanSettingsStore(context).load().folderCovers) return null
         if (song.path.startsWith("content://")) return null
         var dir = runCatching { File(song.path).canonicalFile.parentFile }.getOrNull() ?: return null
         repeat(2) {

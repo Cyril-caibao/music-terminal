@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Sort
@@ -54,7 +55,7 @@ private enum class SortKey(val label: String) {
 }
 
 /** 资料库内的二级页面。以前只有「歌单」一个布尔量，加到三个就得用枚举了 */
-private enum class LibPane { LIST, ARTISTS, ALBUMS, PLAYLISTS }
+private enum class LibPane { LIST, ARTISTS, ALBUMS, PLAYLISTS, SETTINGS }
 
 /**
  * 资料库：全部歌曲 + 排序 + 快搜 + **长按多选批处理**。
@@ -95,6 +96,10 @@ fun LibraryScreen(
             PlaylistsScreen(container, onBack = { pane = LibPane.LIST }, onPlayed = onPlayed)
             return
         }
+        LibPane.SETTINGS -> {
+            ScanSettingsScreen(container, onBack = { pane = LibPane.LIST })
+            return
+        }
         else -> Unit
     }
 
@@ -131,6 +136,9 @@ fun LibraryScreen(
                 }
                 IconButton(onClick = { container.rescan() }) {
                     Icon(Icons.Rounded.Refresh, contentDescription = "重新扫描", tint = PColors.TextDim)
+                }
+                IconButton(onClick = { pane = LibPane.SETTINGS }) {
+                    Icon(Icons.Rounded.Settings, contentDescription = "扫描设置", tint = PColors.TextDim)
                 }
                 // 菜单必须和按钮在同一个 Box 里：DropdownMenu 是弹出层、不占布局，
                 // 直接放在 Row 里当兄弟节点的话，它的「锚点」就变成 Row 的起点 ——
