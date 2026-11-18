@@ -1,0 +1,20 @@
+# 构建产物
+.gradle/
+build/
+app/build/
+cxx/
+.externalNativeBuild/
+captures/
+
+# 本机配置与签名材料（绝不入库）
+local.properties
+signing.properties
+cyrilmusic-release.jks
+
+# IDE / 系统
+.idea/
+*.iml
+.DS_Store
+
+# 项目私有数据
+.workbuddy/

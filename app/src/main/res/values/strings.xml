@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CyrilMusic</string>
+    <string name="notification_channel_name">播放控制</string>
+    <string name="notification_channel_desc">在通知栏 / 锁屏显示当前播放的歌曲与走带按钮</string>
+</resources>
