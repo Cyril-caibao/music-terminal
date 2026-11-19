@@ -123,6 +123,20 @@ export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' |
 export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 export type VisualizerFrameRate = 'off' | 120 | 90 | 60;
 
+export type LyricRenderScale = 0.5 | 0.75 | 1 | 1.5 | 2;
+/** 歌词画布的抗锯齿：auto 是各样式自己的默认（有的开 MSAA，有的靠后处理）。 */
+export type LyricAntialias = 'auto' | 'on' | 'off';
+/** 「性能与动效」里的全局挡位：各样式默认跟随它。 */
+export interface LyricRenderQuality {
+  scale: LyricRenderScale;
+  antialias: LyricAntialias;
+}
+/** 一个歌词样式自己的分辨率与抗锯齿（存在样式的 tuning 里）：global 跟随全局挡位。 */
+export interface LyricRenderOverride {
+  scale: 'global' | LyricRenderScale;
+  antialias: 'global' | 'on' | 'off';
+}
+
 export type HomeViewTab = 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio';
 
 export type PlaybackContext = 'main' | 'stage';
@@ -393,6 +407,8 @@ export interface ClassicTuning {
   breathingFloatMultiplier: number;
   useLegacyLayout?: boolean;
   wordSpacing?: number;
+  /** Space the words by how far they are drawn when scaled, turned and offset, so none overlaps another. */
+  avoidOverlap?: boolean;
 }
 
 export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
@@ -400,9 +416,11 @@ export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
   breathingFloatMultiplier: 1,
   useLegacyLayout: false,
   wordSpacing: 0.7,
+  avoidOverlap: false,
 };
 
 export interface CadenzaTuning {
+  render?: LyricRenderOverride;
   fontScale: number;
   widthRatio: number;
   motionAmount: number;
@@ -411,6 +429,7 @@ export interface CadenzaTuning {
 }
 
 export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
+  render: { scale: 'global', antialias: 'global' },
   fontScale: 1.12,
   widthRatio: 0.72,
   motionAmount: 1,
@@ -423,6 +442,8 @@ export interface PartitaTuning {
   useSemanticLayout: boolean;
   staggerMin: number;
   staggerMax: number;
+  /** Space the words and rows by how far they are drawn when scaled, so none overlaps another. */
+  avoidOverlap?: boolean;
 }
 
 export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
@@ -430,9 +451,11 @@ export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
   useSemanticLayout: true,
   staggerMin: 20,
   staggerMax: 100,
+  avoidOverlap: false,
 };
 
 export interface FumeTuning {
+  render?: LyricRenderOverride;
   hidePrintSymbols: boolean;
   disableGeometricBackground: boolean;
   backgroundObjectOpacity: number;
@@ -444,6 +467,7 @@ export interface FumeTuning {
 }
 
 export const DEFAULT_FUME_TUNING: FumeTuning = {
+  render: { scale: 'global', antialias: 'global' },
   hidePrintSymbols: false,
   disableGeometricBackground: true,
   backgroundObjectOpacity: 0.5,
@@ -500,6 +524,7 @@ export const DEFAULT_TILT_TUNING: TiltTuning = {
 };
 
 export interface PendoloTuning {
+  render?: LyricRenderOverride;
   arcRadius: number;
   arcAngleDeg: number;
   wheelCenterX: number;
@@ -513,6 +538,7 @@ export interface PendoloTuning {
 }
 
 export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
+  render: { scale: 'global', antialias: 'global' },
   arcRadius: 0.42,
   arcAngleDeg: 100,
   wheelCenterX: 0.0,
@@ -528,6 +554,7 @@ export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
 export type SonnetOuterFrameMode = 'none' | 'frame' | 'full';
 
 export interface SonnetTuning {
+  render?: LyricRenderOverride;
   cameraIntensity: number;
   typographyMotion: number;
   mgDensity: number;
@@ -558,6 +585,7 @@ export interface SonnetTuning {
 }
 
 export const DEFAULT_SONNET_TUNING: SonnetTuning = {
+  render: { scale: 'global', antialias: 'global' },
   cameraIntensity: 1,
   typographyMotion: 1,
   mgDensity: 1,
@@ -619,6 +647,7 @@ export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'>
 };
 
 export interface TemperaTuning {
+  render?: LyricRenderOverride;
   cameraIntensity: number;
   /** Per-glyph entrance motion strength, 0..2. */
   glyphMotion: number;
@@ -672,6 +701,7 @@ export interface TemperaTuning {
 }
 
 export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
+  render: { scale: 'global', antialias: 'global' },
   cameraIntensity: 1,
   glyphMotion: 1,
   wholeLineLyrics: false,
@@ -701,6 +731,7 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
 export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
 
 export interface LumiereTuning {
+  render?: LyricRenderOverride;
   /** 光强倍率, 0.3..2. */
   lightIntensity: number;
   /** 随音乐变亮, 0..2 (0 = 不随音乐变). */
@@ -759,6 +790,7 @@ export interface LumiereTuning {
 }
 
 export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
+  render: { scale: 'global', antialias: 'global' },
   lightIntensity: 1,
   audioResponse: 1,
   fogDensity: 1,
@@ -844,6 +876,7 @@ export const DIORAMA_PARTICLE_GLOW_INTENSITY_MAX = 1.5;
 export const DIORAMA_PARTICLE_GLOW_INTENSITY_STEP = 0.05;
 
 export interface DioramaTuning {
+  render?: LyricRenderOverride;
   cameraSpeed: number;
   motionAmount: number;
   audioReactivity: number;
@@ -881,6 +914,7 @@ export interface DioramaTuning {
 }
 
 export const DEFAULT_DIORAMA_TUNING: DioramaTuning = {
+  render: { scale: 'global', antialias: 'global' },
   cameraSpeed: 1,
   motionAmount: 1,
   audioReactivity: 1,
@@ -989,6 +1023,7 @@ export interface SoraBackgroundTuning {
 }
 
 export interface MonetTuning {
+  render?: LyricRenderOverride;
   keywordColoringEnabled: boolean;
   showDescription: boolean;
   showAudioVisualization: boolean;
@@ -1064,6 +1099,7 @@ export const DEFAULT_SORA_BACKGROUND_TUNING: SoraBackgroundTuning = {
 };
 
 export const DEFAULT_MONET_TUNING: MonetTuning = {
+  render: { scale: 'global', antialias: 'global' },
   keywordColoringEnabled: true,
   showDescription: true,
   showAudioVisualization: true,
@@ -1417,3 +1453,49 @@ export interface AudioBands {
     treble: MotionValue<number>;  // 3500Hz+ (Crosses)
     spectrum?: MotionValue<Uint8Array<ArrayBuffer>>; // Raw analyser FFT magnitude bins for full-spectrum visualizers
   }
+
+export type SubtitleOverlayRowSource = 'current' | 'next' | 'translation' | 'romanization';
+export type SubtitleOverlayFollowRow = Exclude<SubtitleOverlayRowSource, 'current'>;
+// The shared bottom subtitle overlay's rows, top to bottom, joined with '+' (stored and carried as this string).
+// One row is the current line, its translation or its romanization; two or three rows open with the current line,
+// and each row after it is the next line, the translation or the romanization.
+export type SubtitleOverlayLayout =
+  | Exclude<SubtitleOverlayRowSource, 'next'>
+  | `current+${SubtitleOverlayFollowRow}`
+  | `current+${SubtitleOverlayFollowRow}+${SubtitleOverlayFollowRow}`;
+
+
+export interface BeatEffectSetting {
+  on: boolean;
+  strength: number;
+  /**
+   * An effect made of parts, each with its own slider (BeatEffectDef `parts`, 雾笺's 疏雨轻车): their
+   * strengths by part key, 0..2, a part never touched at 1. `strength` is then unused.
+   */
+  parts?: Record<string, number>;
+}
+
+/**
+ * 智能动感模式's three settings (2026-10-17, the user's 全开 / 半开 / 不开):
+ * - `on`: the effects play, and a track with nothing stored is analysed now on the GPU.
+ * - `cached`: the effects play from what is already stored - a track analysed before under `on`, or
+ *   whose beats automix analysed - and nothing is ever started for them: no model run, no decode, no
+ *   stream read. A track with nothing stored keeps its original picture. Runs already in flight
+ *   elsewhere (automix's) are waited for and used, as they cost nothing more. Automix itself is not
+ *   changed by this setting.
+ * - `off`: every picture exactly as it was; nothing read, nothing run.
+ */
+export type SmartBeatMode = 'off' | 'cached' | 'on';
+
+/**
+ * 智能动感模式, one setting for every visualizer and background that draws beat FX, and each effect's
+ * own setting. The effects a picture has are declared on its registry entry (`beatEffects`), each
+ * reading beat_this' beats or htdemucs' drum hits (src/services/beatFx). An effect with nothing
+ * stored plays at strength 1. Read `mode` through `smartBeatActive` / `smartBeatMayAnalyse`
+ * (services/beatFx/beatEffects.ts), never by comparing it in place.
+ */
+export interface SmartBeatSettings {
+  mode: SmartBeatMode;
+  /** Keyed by effect id (`sonnet.lensTear`); only the effects the user has touched. */
+  effects: Readonly<Record<string, BeatEffectSetting>>;
+}

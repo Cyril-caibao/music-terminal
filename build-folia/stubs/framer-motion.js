@@ -26,3 +26,7 @@ export class MotionValue {
 export function useMotionValue(value) {
     return new MotionValue(value);
 }
+
+export function motionValue(value) {
+    return new MotionValue(value);
+}

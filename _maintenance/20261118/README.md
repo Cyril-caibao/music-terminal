@@ -434,3 +434,49 @@ server.py 的 `TERM_CMDS_PS` 新增 5 个 PowerShell 函数 + 别名：
 nupkg 内 exe = `9d7127cc…`，与 dist 一致。三处（dist / Electron 壳 / 已装 1.0.6）已同步。
 
 打包版 22/22、25/25、19/19（单跑）、11/11 全过。Settings.json 测试后已还原 `light`/`sonic`。
+
+## 30. 第八轮：商籁（Sonnet）+ 雾笺（Nebbia）移植
+
+- **源**：`C:/Users/Cuisi/Downloads/Mineradio-main/vendor-src/folia/src/components/visualizer/{sonnet,nebbia}`。
+- **sonnet**（55 文件）：印刷排版 PV，绝对时间驱动。新增共享依赖 `utils/lyricRenderQuality.ts`、
+  `visualizer/visualizerSeedHash.ts`、`pixiRuntimeHost.ts`；刷新 `types.ts`（新增 SonnetTuning 等）、
+  `wordSegmentation.ts`、`colorMix.ts`。`sonnet/sonnetLensFilter.ts`、`sonnetPrintFilters.ts` 沿用上一轮已拷贝版本。
+- **nebbia**（53 文件 + 资源）：WebGL2 雾玻璃 PV，接节拍与人声。新增 `services/lucideIconResolver.ts`、
+  `services/beatFx/{beatEffects,clock}.ts`、`mineradio/local/{localLiveAnalysis,localAnalysisBoundary}.ts`、
+  `stores/motionSignals.ts`、`utils/playerBottomBarLayout.ts`、`visualizer/tuningDefinition.ts`（新 read/storage API）。
+  `nebbiaRaindrop.png` 转 `nebbiaRaindropAsset.ts`（内联 base64）；`nebbiaStrokes.ts` 的
+  `import.meta.env.BASE_URL` 改为 `./nebbia-strokes.json` 相对路径（rolldown 无 import.meta.env），
+  `web/nebbia-strokes.json` 随包分发。`useVisualSettings` 用薄垫片（WebTerm 无该 store，喂固定值）。
+- **构建链**：Mineradio 侧 node_modules 已被清理 → `build-folia` 本地 `npm i rolldown pixi.js@8.21.0
+  @chenglou/pretext@0.0.9 react@19 react-dom@19 lucide-react`（真 lucide 替换空 stub，图标效果完整）；
+  `build.mjs` 的 `FOLIA_NM` 改为本地 `node_modules`。产物 6816 KB。
+- **桥接**：`web/sonnet-bridge.js`（347 行）、`web/nebbia-bridge.js`（381 行），接口与 Tempera 桥一致
+  （init/setLyrics/start/stop/resize/isRunning/setTuning/setTheme/themeName/seek/debug）。雾笺驱动
+  `vocal` MV（人声频段 2k-6k）+ `advanceLocalAnalysis`/`applyLocalAnalysisAudio` 智能动感链路。
+- **前端**：BG_MODES 五态（sonic/lumiere/tempera/sonnet/nebbia），外观面板【商籁】【雾笺】按钮、
+  「视」菜单两项、`BG_LABEL` 更新、译文条浅色规则扩展到五态。
+- **文字自适应**（用户反馈「有些字在特定场景很难看清」）：
+  1. 雾笺主着色器：字迹=擦开雾见窗外，窗外与雾亮度接近时融掉。现在按「对比度不足才干预」
+     自适应：雾偏暗把字迹往亮端推（逆光描白）、雾偏亮往暗端压，暗雾另加暖色 rim 光晕
+     （`nebbiaShaders.ts` 擦开区合成段）。
+  2. 终端文字：电台可视化模式下 xterm 文字加 text-shadow 描影（浅色主题且凝彩/商籁/雾笺
+     用白描影；绘光白主题仍是压暗舞台，保持暗描影）。
+  3. `__cyrilApplyTheme(name)` 支持可选参数（原来忽略参数，测试与外部调用传主题名不生效）。
+- **验证**：`_sonnet_nebbia_test.cjs` 19/19（挂载/桥接 API/双模式切换渲染/主题/resize 压测/互斥全停/
+  全程无 JS 异常）；`_nebbia_ink_probe.cjs` 暗景与日雾截图各一，字迹可读；既有四套全过：
+  凝彩 25/25、绘光 19/19、歌词 11/11、译文条 22/22（浅色深字断言修复后）。
+- **教训**：①探针先 setLyrics 再进电台会被播放器推来的空歌词覆盖 → 必须 start 之后 set；
+  ②歌词字迹随歌词行结束淡出，截图要卡在行内；③`_lumiere_theme_test` 默认连 18765，
+  与测试服务端口不一致时页面导航失败表现为 chrome-error://。
+
+## 31. 本轮产物（1.0.8）
+
+| 文件 | 大小 B | SHA256 |
+| --- | --- | --- |
+| `dist\WebTerm.exe` | 201,183,597 | `784bc7d91202362d01ae3d602194109c30903e1ffebae9b6f056fb3a33cb1559` |
+| `installer\WebTerm-Electron-Setup-1.0.8.exe` | 357,466,624 | `c2cab10023144696c0658410e04432bfbdda2e60c389181234b1bb69f7dd4ab1` |
+| `installer\WebTerm-1.0.8-full.nupkg` | 356,631,190 | `fb9fca9bbf7a665ac24a4b6ef46c8f575f38067bf444b47ce009d2d9ef62b268` |
+
+nupkg 内 `lib/net45/resources/WebTerm.exe` = `784bc7d9…`，与 dist 一致。
+三处（dist / `electron-dist\...\resources` / `%LOCALAPPDATA%\WebTerm\app-1.0.6\resources`）已同步
+201,183,597 B。`Settings.json` 已还原 `theme=light / bg_source=sonic`。

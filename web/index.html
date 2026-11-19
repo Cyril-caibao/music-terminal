@@ -374,6 +374,24 @@
   body.sonic-on #sonic-canvas { display: block; }
   body.tempera-on #tempera-canvas { display: block; }
   body.light #tempera-canvas { background: #f5f5f4; }
+  /* 商籁（Folia Sonnet 移植）：印刷排版 PV，Pixi 画布整幅纸底，host 铺色兜底同凝彩 */
+  #sonnet-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: none;
+    background: #09090b;
+  }
+  body.sonnet-on #sonnet-canvas { display: block; }
+  body.light #sonnet-canvas { background: #f5f5f4; }
+  /* 雾笺（Folia Nebbia 移植）：WebGL2 雾玻璃 PV，画布整幅窗景，host 铺色兜底同凝彩 */
+  #nebbia-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    display: none;
+    background: #09090b;
+  }
+  body.nebbia-on #nebbia-canvas { display: block; }
+  body.light #nebbia-canvas { background: #f5f5f4; }
   /* 可视化器的译文条。绘光 / 凝彩的大字只用歌词原文（英文歌就是英文），
      译文单独一行压在画面下方 —— 这是 Folia 原版的职责划分：Pixi 只画正文，
      VisualizerSubtitleOverlay 在 React 层叠一行译文。我们没搬 React 壳，
@@ -396,9 +414,27 @@
   /* 只有「浅色主题 + 凝彩」是浅纸深字。绘光两种主题都是压暗的舞台底（白主题也把
      #f5f5f4 压到 #0f0f0e），字必须保持浅色；而 body.on-light 是按**壁纸**亮度算的，
      浅壁纸 + 黑主题时它也会挂上，照它翻字色会让绘光出现深字压暗场。 */
-  body.light.tempera-on #viz-sub {
+  body.light.tempera-on #viz-sub,
+  body.light.sonnet-on #viz-sub,
+  body.light.nebbia-on #viz-sub {
     color: rgba(28, 25, 23, 0.9);
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.9), 0 2px 14px rgba(255, 255, 255, 0.65);
+  }
+  /* 文字自适应（电台可视化器）：雾笺/绘光的画面亮度随镜头起伏，xterm 的 ANSI
+     配色是固定的，浅字压亮雾、深字压暗景都会糊。DOM 渲染器吃 text-shadow，
+     给终端文字加一圈暗描影（白天暗字也压得住亮雾，夜里浅字不会被雾吃掉），
+     比整块纱罩轻 —— 不改变「终端透出可视化画面」的层次。 */
+  body.radio-on.lumiere-on #terminal .xterm-screen,
+  body.radio-on.tempera-on #terminal .xterm-screen,
+  body.radio-on.sonnet-on #terminal .xterm-screen,
+  body.radio-on.nebbia-on #terminal .xterm-screen {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.88), 0 0 9px rgba(0, 0, 0, 0.5);
+  }
+  /* 浅色描影只给真的翻亮的画面（凝彩/商籁浅纸、雾笺日雾）；绘光白主题仍是压暗舞台，照旧用暗描影 */
+  body.radio-on.light.tempera-on #terminal .xterm-screen,
+  body.radio-on.light.sonnet-on #terminal .xterm-screen,
+  body.radio-on.light.nebbia-on #terminal .xterm-screen {
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.85), 0 0 9px rgba(255, 255, 255, 0.45);
   }
   /* 浅色主题（日光素白）的舞台底：原版暗场 = 主题背景色 × 0.06，
      #f5f5f4 压暗后是 #0f0f0e（暖黑），比写死的 #050208（冷蓝黑）对得上配色。 */
@@ -1830,6 +1866,8 @@
         <button id="btnMode" class="btn" title="音域回响：星河 + 地形（Mineradio 视觉预设 7）">音域回响</button>
         <button id="btnLumiere" class="btn" title="绘光：舞台光束 + 烟雾 + 浮尘">绘光</button>
         <button id="btnTempera" class="btn" title="凝彩：网点色块 PV + 大字拼贴（Folia Tempera）">凝彩</button>
+        <button id="btnSonnet" class="btn" title="商籁：印刷排版镜头流 PV（Folia Sonnet）">商籁</button>
+        <button id="btnNebbia" class="btn" title="雾笺：雾玻璃 PV，接节拍与人声（Folia Nebbia）">雾笺</button>
       </div>
       <div class="ap-row">
         <span class="ap-label">自定义</span>
@@ -1905,6 +1943,8 @@
   <div id="radio" aria-hidden="true">
     <div id="lumiere-canvas"></div>
     <div id="tempera-canvas"></div>
+    <div id="sonnet-canvas"></div>
+    <div id="nebbia-canvas"></div>
     <canvas id="sonic-canvas"></canvas>
   </div>
   <!-- 白罩盖在背景（图片/视频/音域/绘光）之上、终端文字之下：必须位于 #radio 之后
@@ -1966,7 +2006,7 @@
       <button id="rbtn-lyrics" class="rbtn" title="歌词">词</button>
       <button id="rbtn-eq" class="rbtn" title="均衡器">EQ</button>
       <span class="spacer"></span>
-      <button id="rbtn-view" class="rbtn" title="视图：音域 / 绘光 / 封面拼贴"
+      <button id="rbtn-view" class="rbtn" title="视图：音域 / 绘光 / 凝彩 / 商籁 / 雾笺 / 封面拼贴"
               aria-haspopup="menu" aria-expanded="false">视</button>
       <button id="rbtn-import" class="rbtn" title="导入音乐">＋</button>
       <button id="rbtn-queue" class="rbtn" title="播放队列">☰</button>
@@ -1983,6 +2023,12 @@
     </button>
     <button class="vm-item" role="menuitemradio" data-view="tempera">
       <span class="vm-ico">◨</span><span class="vm-txt">凝彩</span><span class="vm-tick">✓</span>
+    </button>
+    <button class="vm-item" role="menuitemradio" data-view="sonnet">
+      <span class="vm-ico">✎</span><span class="vm-txt">商籁</span><span class="vm-tick">✓</span>
+    </button>
+    <button class="vm-item" role="menuitemradio" data-view="nebbia">
+      <span class="vm-ico">❉</span><span class="vm-txt">雾笺</span><span class="vm-tick">✓</span>
     </button>
     <div class="vm-sep"></div>
     <button class="vm-item" role="menuitem" data-view="lattice">
@@ -2976,6 +3022,8 @@
 <script type="module" src="folia-adapter.js"></script>
 <script src="folia-bridge.js"></script>
 <script src="tempera-bridge.js"></script>
+<script src="sonnet-bridge.js"></script>
+<script src="nebbia-bridge.js"></script>
 <script src="xterm.min.js"></script>
 <script src="addon-fit.min.js"></script>
 <script>
@@ -3278,6 +3326,10 @@
     /* 凝彩（Folia Tempera）同一套预设、同一个挂点。差别在于凝彩的纸色就是
        theme.backgroundColor —— 白 → 整屏浅纸墨字，黑 → 整屏深纸亮字。 */
     if (window.Tempera && window.Tempera.setTheme) window.Tempera.setTheme(name === 'light');
+    /* 商籁（Folia Sonnet）同一套预设、同一个挂点。 */
+    if (window.Sonnet && window.Sonnet.setTheme) window.Sonnet.setTheme(name === 'light');
+    /* 雾笺（Folia Nebbia）同一套预设；雾的浓淡配色额外跟日夜（setDaylight）。 */
+    if (window.Nebbia && window.Nebbia.setTheme) window.Nebbia.setTheme(name === 'light');
   }
 
   document.getElementById('btnBlack').addEventListener('click', function () { applyTheme('dark'); });
@@ -3379,11 +3431,17 @@
     const sonic = document.body.classList.contains('sonic-on');
     const lumiere = document.body.classList.contains('lumiere-on');
     const tempera = document.body.classList.contains('tempera-on');
+    const sonnet = document.body.classList.contains('sonnet-on');
+    const nebbia = document.body.classList.contains('nebbia-on');
     const kind = localStorage.getItem('Win-webterm-bg-kind') || '';
     document.getElementById('btnMode').classList.toggle('active', radioOn && sonic);
     document.getElementById('btnLumiere').classList.toggle('active', radioOn && lumiere);
     const elT = document.getElementById('btnTempera');
     if (elT) elT.classList.toggle('active', radioOn && tempera);
+    const elSn = document.getElementById('btnSonnet');
+    if (elSn) elSn.classList.toggle('active', radioOn && sonnet);
+    const elNb = document.getElementById('btnNebbia');
+    if (elNb) elNb.classList.toggle('active', radioOn && nebbia);
     document.getElementById('btnWall').classList.toggle('active', !radioOn && kind.indexOf('builtin') === 0);
   }
   window.__cyrilSyncBackdrop = syncBackdropBtns;
@@ -4844,7 +4902,7 @@
   term.focus();
 
   // 暴露给电台模式：切换 radio-on 后重设终端透明背景并重新适配尺寸
-  window.__cyrilApplyTheme = function () { applyTheme(themeName); };
+  window.__cyrilApplyTheme = function (name) { applyTheme(name || themeName); };
   window.__cyrilRefit = function () { sendResize(); };
   /* 只重算 xterm 自身行列、不等 WebSocket 鉴权：终端被搬进拼贴浮窗（#termFloat）时，
      尺寸必须当帧就跟上；否则在未鉴权的那几百毫秒里 xterm 仍按全屏列宽绘制，
@@ -5216,17 +5274,21 @@
      tempera = 凝彩（Folia Tempera 移植）：网点图形色块 PV + 大字拼贴 + 121 种镜头
      互斥：任一时刻只有一层在跑，画布切换靠 body 上的 class。
      默认 sonic —— 用户要的是「进来就有星空 + 地形」。 */
-  var BG_MODES = ['sonic', 'lumiere', 'tempera'];
-  var BG_LABEL = { sonic: '音域', lumiere: '绘光', tempera: '凝彩' };
+  var BG_MODES = ['sonic', 'lumiere', 'tempera', 'sonnet', 'nebbia'];
+  var BG_LABEL = { sonic: '音域', lumiere: '绘光', tempera: '凝彩', sonnet: '商籁', nebbia: '雾笺' };
 
   /** 统一收敛：先全停，再按 next 起对应的那一层。 */
   function applyBackground(next) {
     bgMode = BG_MODES.indexOf(next) >= 0 ? next : 'sonic';
     if (window.Lumiere) Lumiere.stop();
     if (window.Tempera) Tempera.stop();
+    if (window.Sonnet) Sonnet.stop();
+    if (window.Nebbia) Nebbia.stop();
     if (window.CyrilSonic) CyrilSonic.stop();
     document.body.classList.toggle('lumiere-on', bgMode === 'lumiere');
     document.body.classList.toggle('tempera-on', bgMode === 'tempera');
+    document.body.classList.toggle('sonnet-on', bgMode === 'sonnet');
+    document.body.classList.toggle('nebbia-on', bgMode === 'nebbia');
     document.body.classList.toggle('sonic-on', bgMode === 'sonic');
     if (mode === 'radio') {
       if (bgMode === 'lumiere') {
@@ -5234,6 +5296,12 @@
       } else if (bgMode === 'tempera') {
         if (window.Tempera) Tempera.start();
         else fallbackToLumiere();      // 桥接文件没加载：退回绘光，别留黑屏
+      } else if (bgMode === 'sonnet') {
+        if (window.Sonnet && window.SonnetFolia) Sonnet.start();
+        else fallbackToLumiere();
+      } else if (bgMode === 'nebbia') {
+        if (window.Nebbia && window.NebbiaFolia) Nebbia.start();
+        else fallbackToLumiere();
       } else if (!window.CyrilSonic || !CyrilSonic.start()) {
         // THREE / WebGL 起不来就退到绘光，别留一片黑屏（银河层已删，没有第二选择）
         fallbackToLumiere();
@@ -5307,7 +5375,7 @@
   }
   function viewMenuPick(v) {
     viewMenuHide();
-    if (v === 'sonic' || v === 'lumiere' || v === 'tempera') {
+    if (v === 'sonic' || v === 'lumiere' || v === 'tempera' || v === 'sonnet' || v === 'nebbia') {
       /* 已经在电台、且点的是当前背景 → 什么都不做（避免无谓重启画布闪烁）。
          其余情况一律走 enterRadio：它负责「进电台 + 应用背景 + 起画布」。
          早先这里只调 applyBackground，而 applyBackground 只在 mode==='radio' 时才
@@ -5338,7 +5406,7 @@
   function syncBgBtn() {
     syncViewMenu();
     if (elViewBtn) {
-      elViewBtn.title = '视图：音域 / 绘光 / 凝彩 / 封面拼贴（当前 ' + (BG_LABEL[bgMode] || '音域') + '）';
+      elViewBtn.title = '视图：音域 / 绘光 / 凝彩 / 商籁 / 雾笺 / 封面拼贴（当前 ' + (BG_LABEL[bgMode] || '音域') + '）';
     }
   }
 
@@ -5359,6 +5427,18 @@
   var btnTempera = document.getElementById('btnTempera');
   if (btnTempera) btnTempera.addEventListener('click', function () {
     enterRadio('tempera');
+    if (window.__cyrilApClose) window.__cyrilApClose();
+  });
+
+  /* 【外观】→【商籁】/【雾笺】：同一条路（进电台 + 指定背景）。 */
+  var btnSonnet = document.getElementById('btnSonnet');
+  if (btnSonnet) btnSonnet.addEventListener('click', function () {
+    enterRadio('sonnet');
+    if (window.__cyrilApClose) window.__cyrilApClose();
+  });
+  var btnNebbia = document.getElementById('btnNebbia');
+  if (btnNebbia) btnNebbia.addEventListener('click', function () {
+    enterRadio('nebbia');
     if (window.__cyrilApClose) window.__cyrilApClose();
   });
 
@@ -5566,6 +5646,40 @@
       playing: function () { return audio && !audio.paused; },
       getTime: function () { return audio.currentTime || 0; },
       hasTrack: function () { return !!(audio.currentSrc || audio.getAttribute('src')); }
+    });
+  }
+
+  /* 商籁背景初始化（sonnet-bridge.js 定义 window.Sonnet）。
+     商籁同为绝对时间驱动（印刷排版镜头流），不接 readBand，
+     钩子与凝彩一致：时间 / 播放态 / 有无曲目。 */
+  if (window.Sonnet) {
+    Sonnet.init(document.getElementById('sonnet-canvas'), {
+      playing: function () { return audio && !audio.paused; },
+      getTime: function () { return audio.currentTime || 0; },
+      hasTrack: function () { return !!(audio.currentSrc || audio.getAttribute('src')); }
+    });
+  }
+
+  /* 雾笺背景初始化（nebbia-bridge.js 定义 window.Nebbia）。
+     雾笺接「智能动感」链路（节拍时钟 + 实时 FFT 打点 + 人声能量），
+     所以额外给 audioFrame 钩子：走 sonicAnalyser 那路 1024 点分析器
+     （主 analyser 只有 256 点，35-9000Hz 三段各摊不到两格，打不出鼓点）。 */
+  if (window.Nebbia) {
+    Nebbia.init(document.getElementById('nebbia-canvas'), {
+      playing: function () { return audio && !audio.paused; },
+      getTime: function () { return audio.currentTime || 0; },
+      hasTrack: function () { return !!(audio.currentSrc || audio.getAttribute('src')); },
+      audioFrame: function () {
+        if (!sonicAnalyser || !sonicFreqData || !audioCtx) return null;
+        try {
+          sonicAnalyser.getByteFrequencyData(sonicFreqData);
+          return {
+            frequency: sonicFreqData,
+            fftSize: sonicAnalyser.fftSize,
+            sampleRate: audioCtx.sampleRate
+          };
+        } catch (e) { return null; }
+      }
     });
   }
 
@@ -6512,7 +6626,9 @@
   function updateVizSubtitle() {
     if (!elVizSub) return;
     var vizOn = document.body.classList.contains('lumiere-on') ||
-                document.body.classList.contains('tempera-on');
+                document.body.classList.contains('tempera-on') ||
+                document.body.classList.contains('sonnet-on') ||
+                document.body.classList.contains('nebbia-on');
     if (!vizOn || !curLrc.length || !vizSubEnabled()) {
       elVizSub.classList.remove('show');
       return;
@@ -6541,6 +6657,8 @@
     };
     if (window.Lumiere && window.Lumiere.setLyrics) window.Lumiere.setLyrics(lrc, m);
     if (window.Tempera && window.Tempera.setLyrics) window.Tempera.setLyrics(lrc, m);
+    if (window.Sonnet && window.Sonnet.setLyrics) window.Sonnet.setLyrics(lrc, m);
+    if (window.Nebbia && window.Nebbia.setLyrics) window.Nebbia.setLyrics(lrc, m);
   }
   function renderLrc() {
     var item = queue[current];
@@ -7974,6 +8092,8 @@
     radioEl.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('lumiere-on');
     document.body.classList.remove('tempera-on');
+    document.body.classList.remove('sonnet-on');
+    document.body.classList.remove('nebbia-on');
     document.body.classList.remove('sonic-on');
     stopBackground();
     updateVizSubtitle();   // 类已摘掉 → 这里会立刻收起译文条
@@ -8000,7 +8120,7 @@
 
   /* 给超级终端启动页用：按名字直接进某个视图（不模拟按钮点击，避免二次弹层） */
   window.__cyrilViewOpen = function (v) {
-    if (v === 'sonic' || v === 'lumiere' || v === 'tempera') { enterRadio(v); return true; }
+    if (v === 'sonic' || v === 'lumiere' || v === 'tempera' || v === 'sonnet' || v === 'nebbia') { enterRadio(v); return true; }
     if (v === 'lattice') {
       /* 拼贴是建在电台模式上的全屏视图（latticeOpen 里会检查 radio-on），
          启动页直接点它时先把电台背景唤起，否则什么都不发生。 */

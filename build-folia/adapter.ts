@@ -25,6 +25,33 @@ import {
 } from './lumiere-src/components/visualizer/tempera/temperaProgram';
 import { TemperaPixiRuntime } from './lumiere-src/components/visualizer/tempera/createTemperaPixiRuntime';
 import { DEFAULT_TEMPERA_TUNING } from './lumiere-src/types';
+import {
+    compileSonnetProgram,
+    findSonnetParagraphIndexAtTime,
+} from './lumiere-src/components/visualizer/sonnet/sonnetProgram';
+import { SonnetPixiRuntime } from './lumiere-src/components/visualizer/sonnet/createSonnetPixiRuntime';
+import { DEFAULT_SONNET_TUNING } from './lumiere-src/types';
+import { NebbiaRuntime } from './lumiere-src/components/visualizer/nebbia/createNebbiaRuntime';
+import {
+    DEFAULT_NEBBIA_TUNING,
+    NEBBIA_BEHIND,
+    NEBBIA_GLASS,
+    NEBBIA_GLASS_FOR,
+} from './lumiere-src/components/visualizer/nebbia/types';
+import { normalizeNebbiaTuning } from './lumiere-src/components/visualizer/nebbia/tuning';
+import {
+    advanceLocalAnalysis,
+    applyLocalAnalysisAudio,
+    clearLocalAnalysis,
+    getBeatEffectStrength,
+    getBeatFxEvents,
+    getBeatFxHeard,
+    getBeatFxIntensities,
+    getDrumHits,
+    getVocalEnvelope,
+    isBeatEffectPlaying,
+    isBeatFxReady,
+} from './lumiere-src/mineradio/local/localAnalysisBoundary';
 
 export {
     MotionValue,
@@ -43,6 +70,30 @@ export {
     findTemperaParagraphIndexAtTime,
     TemperaPixiRuntime,
     DEFAULT_TEMPERA_TUNING,
+    /* 商籁：印刷排版 PV。绝对时间驱动（镜头 + 字形 + 网点滤镜）。 */
+    compileSonnetProgram,
+    findSonnetParagraphIndexAtTime,
+    SonnetPixiRuntime,
+    DEFAULT_SONNET_TUNING,
+    /* 雾笺：雾玻璃 PV。WebGL2，接节拍/人声能量（智能动感链路）。 */
+    NebbiaRuntime,
+    DEFAULT_NEBBIA_TUNING,
+    normalizeNebbiaTuning,
+    NEBBIA_BEHIND,
+    NEBBIA_GLASS,
+    NEBBIA_GLASS_FOR,
+    /* 智能动感分析边界（节拍时钟 + 实时 FFT 打点），雾笺由桥接层喂数据。 */
+    advanceLocalAnalysis,
+    applyLocalAnalysisAudio,
+    clearLocalAnalysis,
+    getBeatEffectStrength,
+    getBeatFxEvents,
+    getBeatFxHeard,
+    getBeatFxIntensities,
+    getDrumHits,
+    getVocalEnvelope,
+    isBeatEffectPlaying,
+    isBeatFxReady,
 };
 
 export type { LumiereProgram } from './lumiere-src/components/visualizer/lumiere/lumiereProgram';
@@ -64,6 +115,12 @@ export type {
     TemperaSongMetadata,
     TemperaRuntimeOptions,
 } from './lumiere-src/components/visualizer/tempera/createTemperaPixiRuntime';
+export type {
+    SonnetProgram,
+} from './lumiere-src/components/visualizer/sonnet/sonnetProgram';
+export type {
+    SonnetTuning,
+} from './lumiere-src/types';
 
 declare global {
     interface Window {
@@ -84,6 +141,41 @@ declare global {
             findTemperaParagraphIndexAtTime: typeof findTemperaParagraphIndexAtTime;
             TemperaPixiRuntime: typeof TemperaPixiRuntime;
             DEFAULT_TEMPERA_TUNING: typeof DEFAULT_TEMPERA_TUNING;
+            segmentTextWords: typeof segmentTextWords;
+            BASE_DUAL_THEME: typeof BASE_DUAL_THEME;
+            DEFAULT_THEME: typeof DEFAULT_THEME;
+            DAYLIGHT_THEME: typeof DAYLIGHT_THEME;
+        };
+        SonnetFolia?: {
+            MotionValue: typeof MotionValue;
+            compileSonnetProgram: typeof compileSonnetProgram;
+            findSonnetParagraphIndexAtTime: typeof findSonnetParagraphIndexAtTime;
+            SonnetPixiRuntime: typeof SonnetPixiRuntime;
+            DEFAULT_SONNET_TUNING: typeof DEFAULT_SONNET_TUNING;
+            segmentTextWords: typeof segmentTextWords;
+            BASE_DUAL_THEME: typeof BASE_DUAL_THEME;
+            DEFAULT_THEME: typeof DEFAULT_THEME;
+            DAYLIGHT_THEME: typeof DAYLIGHT_THEME;
+        };
+        NebbiaFolia?: {
+            MotionValue: typeof MotionValue;
+            NebbiaRuntime: typeof NebbiaRuntime;
+            DEFAULT_NEBBIA_TUNING: typeof DEFAULT_NEBBIA_TUNING;
+            normalizeNebbiaTuning: typeof normalizeNebbiaTuning;
+            NEBBIA_BEHIND: typeof NEBBIA_BEHIND;
+            NEBBIA_GLASS: typeof NEBBIA_GLASS;
+            NEBBIA_GLASS_FOR: typeof NEBBIA_GLASS_FOR;
+            advanceLocalAnalysis: typeof advanceLocalAnalysis;
+            applyLocalAnalysisAudio: typeof applyLocalAnalysisAudio;
+            clearLocalAnalysis: typeof clearLocalAnalysis;
+            getBeatEffectStrength: typeof getBeatEffectStrength;
+            getBeatFxEvents: typeof getBeatFxEvents;
+            getBeatFxHeard: typeof getBeatFxHeard;
+            getBeatFxIntensities: typeof getBeatFxIntensities;
+            getDrumHits: typeof getDrumHits;
+            getVocalEnvelope: typeof getVocalEnvelope;
+            isBeatEffectPlaying: typeof isBeatEffectPlaying;
+            isBeatFxReady: typeof isBeatFxReady;
             segmentTextWords: typeof segmentTextWords;
             BASE_DUAL_THEME: typeof BASE_DUAL_THEME;
             DEFAULT_THEME: typeof DEFAULT_THEME;
@@ -110,6 +202,43 @@ declare global {
     findTemperaParagraphIndexAtTime,
     TemperaPixiRuntime,
     DEFAULT_TEMPERA_TUNING,
+    segmentTextWords,
+    BASE_DUAL_THEME,
+    DEFAULT_THEME,
+    DAYLIGHT_THEME,
+});
+
+(globalThis as { window?: Window }).window && ((globalThis as any).window.SonnetFolia = {
+    MotionValue,
+    compileSonnetProgram,
+    findSonnetParagraphIndexAtTime,
+    SonnetPixiRuntime,
+    DEFAULT_SONNET_TUNING,
+    segmentTextWords,
+    BASE_DUAL_THEME,
+    DEFAULT_THEME,
+    DAYLIGHT_THEME,
+});
+
+(globalThis as { window?: Window }).window && ((globalThis as any).window.NebbiaFolia = {
+    MotionValue,
+    NebbiaRuntime,
+    DEFAULT_NEBBIA_TUNING,
+    normalizeNebbiaTuning,
+    NEBBIA_BEHIND,
+    NEBBIA_GLASS,
+    NEBBIA_GLASS_FOR,
+    advanceLocalAnalysis,
+    applyLocalAnalysisAudio,
+    clearLocalAnalysis,
+    getBeatEffectStrength,
+    getBeatFxEvents,
+    getBeatFxHeard,
+    getBeatFxIntensities,
+    getDrumHits,
+    getVocalEnvelope,
+    isBeatEffectPlaying,
+    isBeatFxReady,
     segmentTextWords,
     BASE_DUAL_THEME,
     DEFAULT_THEME,

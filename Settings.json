@@ -26,9 +26,9 @@
   "theme": "light",
   "bg_level": 0,
   "bg_kind": "builtin-light",
-  "bg_source": "lumiere",
+  "bg_source": "sonic",
   "tree_width": 280,
-  "tree_open": true,
+  "tree_open": false,
   "panels": {
     "cw-mtrack": {
       "x": 32,
@@ -41,6 +41,10 @@
     "cw-lxmusic": {
       "x": 179,
       "y": 51
+    },
+    "importPanel": {
+      "x": 136,
+      "y": 46
     }
   },
   "ai": {
