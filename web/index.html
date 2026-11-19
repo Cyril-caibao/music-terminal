@@ -596,6 +596,61 @@
   .q-item .q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .q-item .q-x { color: var(--cy-dim); padding: 0 2px; }
   .q-item .q-x:hover { color: var(--cy-hi); }
+  /* 队列工具栏：搜索 + 分组切换 */
+  #radio-queue-tools {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px 4px; flex: 0 0 auto;
+  }
+  #q-search {
+    flex: 1; min-width: 0;
+    background: rgba(156,255,223,0.06);
+    border: 1px solid rgba(156,255,223,0.22);
+    border-radius: 8px;
+    color: var(--cy-body);
+    font-size: 12px; padding: 5px 9px; outline: none;
+  }
+  #q-search::placeholder { color: var(--cy-dim); }
+  #q-search:focus { border-color: rgba(156,255,223,0.55); background: rgba(156,255,223,0.10); }
+  #q-group-btns { display: flex; gap: 2px; flex: 0 0 auto; }
+  #q-group-btns button {
+    background: transparent; border: 1px solid transparent; border-radius: 7px;
+    color: var(--cy-dim); font-size: 11px; padding: 4px 7px; cursor: pointer;
+  }
+  #q-group-btns button:hover { color: var(--cy-body); background: rgba(156,255,223,0.08); }
+  #q-group-btns button.active {
+    color: var(--cy-accent);
+    background: rgba(156,255,223,0.12);
+    border-color: rgba(156,255,223,0.35);
+  }
+  /* 分组头：可点击折叠 */
+  .q-group-head {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 12px 3px; cursor: pointer; user-select: none;
+    font-size: 10.5px; letter-spacing: 1px; color: var(--cy-label);
+  }
+  .q-group-head:hover { color: var(--cy-body); }
+  .q-group-head .q-caret { font-size: 9px; width: 10px; flex: 0 0 10px; transition: transform .15s; }
+  .q-group-head.collapsed .q-caret { transform: rotate(-90deg); }
+  .q-group-head .q-gname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q-group-head .q-gcount { color: var(--cy-dim); font-weight: normal; letter-spacing: 0; }
+  .q-empty-hint {
+    padding: 18px 12px; text-align: center;
+    color: var(--cy-dim); font-size: 12px; user-select: none;
+  }
+  body:is(.light, .on-light) #q-search {
+    background: rgba(6,105,90,0.05);
+    border-color: rgba(6,105,90,0.22);
+    color: #14524a;
+  }
+  body:is(.light, .on-light) #q-search::placeholder { color: rgba(6,105,90,0.45); }
+  body:is(.light, .on-light) #q-search:focus { border-color: rgba(6,105,90,0.5); background: rgba(6,105,90,0.08); }
+  body:is(.light, .on-light) #q-group-btns button { color: rgba(6,105,90,0.55); }
+  body:is(.light, .on-light) #q-group-btns button:hover { color: #06695a; background: rgba(6,105,90,0.08); }
+  body:is(.light, .on-light) #q-group-btns button.active {
+    color: #06695a; background: rgba(6,105,90,0.12); border-color: rgba(6,105,90,0.35);
+  }
+  body:is(.light, .on-light) .q-group-head { color: rgba(6,105,90,0.65); }
+  body:is(.light, .on-light) .q-group-head:hover { color: #06695a; }
   /* 电台模式：终端底部让位给控制条。实测条高 ~128（含 10px 底距），这里按 128 留。 */
   body.radio-on main { padding-bottom: 128px; }
   /* 导入按钮 */
@@ -2039,6 +2094,14 @@
     <div id="radio-queue-head">
       <span>播放队列</span><span class="q-count" id="radio-qcount">0 首</span>
       <button class="panel-x" data-close="queue" title="关闭">✕</button>
+    </div>
+    <div id="radio-queue-tools">
+      <input id="q-search" type="text" placeholder="搜索 歌名 / 歌手 / 专辑" autocomplete="off" spellcheck="false" />
+      <div id="q-group-btns" title="按歌手或专辑分组">
+        <button type="button" data-g="none" class="active">全部</button>
+        <button type="button" data-g="artist">歌手</button>
+        <button type="button" data-g="album">专辑</button>
+      </div>
     </div>
     <div id="radio-queue-list"></div>
   </div>
@@ -5704,6 +5767,13 @@
   var elQlist = document.getElementById('radio-queue-list');
   var elQcount= document.getElementById('radio-qcount');
   var elQueue = document.getElementById('radio-queue');
+  var elQSearch = document.getElementById('q-search');
+  var elQGroupBtns = document.getElementById('q-group-btns');
+  /* 队列搜索 + 分组：qSearch 过滤词（小写），qGroup = none|artist|album，
+     qCollapsed 记录折叠的组名。分组顺序按队列里首次出现的位置，不重排队列。 */
+  var qSearch = '';
+  var qGroup = 'none';
+  var qCollapsed = {};
   var coverCanvas = document.getElementById('radio-cover');
 
   /* ---------------- 音频元数据解析（纯标准库） ----------------
@@ -6081,29 +6151,125 @@
     syncSonicPalette(coverCanvas);
   }
 
+  /* 队列行构建：idx 是在完整 queue 里的真实下标（删除/播放都用它，
+     搜索过滤后下标不变）。showArtist 控制是否在歌名后补歌手名。 */
+  function buildQueueRow(item, idx, showArtist) {
+    var row = document.createElement('div');
+    row.className = 'q-item' + (idx === current ? ' active' : '');
+    var num = document.createElement('span'); num.className = 'q-num'; num.textContent = idx === current ? '▶' : (idx + 1);
+    var name = document.createElement('span'); name.className = 'q-name';
+    name.textContent = (item.title || item.name) + (showArtist && item.artist ? ' · ' + item.artist : '');
+    var x = document.createElement('span'); x.className = 'q-x'; x.textContent = '×';
+    row.appendChild(num); row.appendChild(name); row.appendChild(x);
+    row.addEventListener('click', function (ev) {
+      if (ev.target === x) {
+        dbDelete(queue[idx].key);   // 从音乐库移除
+        queue.splice(idx, 1); if (idx < current) current--; if (idx === current) stopCurrent();
+        renderQueue();
+        if (elQcount) elQcount.textContent = queue.length + ' 首';
+        syncLibrary();              // 曲库变了，同步给 AI
+        return;
+      }
+      playAt(idx);
+    });
+    return row;
+  }
+  /* 队列过滤：搜索词命中 歌名/歌手/专辑/文件名 任意一项（不分大小写，
+     去书名号引号空格后双向包含，与 AI 点歌的 normKey 同一套归一）。 */
+  function queueFilter() {
+    var q = normKey(qSearch);
+    var list = [];
+    queue.forEach(function (item, idx) {
+      if (!q) { list.push(idx); return; }
+      var hay = normKey(
+        (item.title || '') + ' ' + (item.name || '') + ' ' +
+        (item.artist || '') + ' ' + (item.album || '')
+      );
+      if (hay.indexOf(q) >= 0 || q.indexOf(normKey(item.title || item.name || '')) === 0) list.push(idx);
+    });
+    return list;
+  }
   function renderQueue() {
     elQlist.innerHTML = '';
-    elQcount.textContent = queue.length + ' 首';
-    queue.forEach(function (item, idx) {
-      var row = document.createElement('div');
-      row.className = 'q-item' + (idx === current ? ' active' : '');
-      var num = document.createElement('span'); num.className = 'q-num'; num.textContent = idx === current ? '▶' : (idx + 1);
-      var name = document.createElement('span'); name.className = 'q-name';
-      name.textContent = (item.title || item.name) + (item.artist ? ' · ' + item.artist : '');
-      var x = document.createElement('span'); x.className = 'q-x'; x.textContent = '×';
-      row.appendChild(num); row.appendChild(name); row.appendChild(x);
-      row.addEventListener('click', function (ev) {
-        if (ev.target === x) {
-          dbDelete(queue[idx].key);   // 从音乐库移除
-          queue.splice(idx, 1); if (idx < current) current--; if (idx === current) stopCurrent();
-          renderQueue();
-          if (elQcount) elQcount.textContent = queue.length + ' 首';
-          syncLibrary();              // 曲库变了，同步给 AI
-          return;
-        }
-        playAt(idx);
+    var idxs = queueFilter();
+    var n = queue.length;
+    elQcount.textContent = (qSearch && idxs.length !== n)
+      ? idxs.length + ' / ' + n + ' 首'
+      : n + ' 首';
+    if (!idxs.length) {
+      var hint = document.createElement('div');
+      hint.className = 'q-empty-hint';
+      hint.textContent = queue.length ? '没有匹配「' + qSearch + '」的曲目' : '队列是空的——点「＋」导入音乐';
+      elQlist.appendChild(hint);
+      return;
+    }
+    if (qGroup === 'none') {
+      idxs.forEach(function (idx) {
+        elQlist.appendChild(buildQueueRow(queue[idx], idx, true));
       });
-      elQlist.appendChild(row);
+      return;
+    }
+    /* 分组：按组名（歌手/专辑）聚合，组顺序 = 各组在过滤结果里首次出现的顺序；
+       折叠状态记在 qCollapsed，组头点击切换。 */
+    var order = [], groups = {};
+    idxs.forEach(function (idx) {
+      var it = queue[idx];
+      var g = String((qGroup === 'artist' ? it.artist : it.album) || '').trim() ||
+        (qGroup === 'artist' ? '未知歌手' : '未知专辑');
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(idx);
+    });
+    order.forEach(function (g) {
+      var rows = groups[g];
+      var collapsed = !!qCollapsed[g];
+      var head = document.createElement('div');
+      head.className = 'q-group-head' + (collapsed ? ' collapsed' : '');
+      var caret = document.createElement('span'); caret.className = 'q-caret'; caret.textContent = '▼';
+      var gname = document.createElement('span'); gname.className = 'q-gname'; gname.textContent = g;
+      var gcount = document.createElement('span'); gcount.className = 'q-gcount'; gcount.textContent = rows.length + ' 首';
+      head.appendChild(caret); head.appendChild(gname); head.appendChild(gcount);
+      head.addEventListener('click', function () {
+        qCollapsed[g] = !qCollapsed[g];
+        head.classList.toggle('collapsed', qCollapsed[g]);
+        rows.forEach(function (idx) {
+          var row = elQlist.querySelector('.q-item[data-qidx="' + idx + '"]');
+          if (row) row.style.display = qCollapsed[g] ? 'none' : '';
+        });
+      });
+      elQlist.appendChild(head);
+      rows.forEach(function (idx) {
+        var row = buildQueueRow(queue[idx], idx, qGroup !== 'artist');
+        row.setAttribute('data-qidx', idx);
+        if (collapsed) row.style.display = 'none';
+        elQlist.appendChild(row);
+      });
+    });
+  }
+  if (elQSearch) {
+    elQSearch.addEventListener('input', function () {
+      qSearch = elQSearch.value.trim();
+      renderQueue();
+    });
+    /* 搜索框里按 Esc 清空并收焦，不触发面板关闭 */
+    elQSearch.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        elQSearch.value = ''; qSearch = '';
+        renderQueue();
+        elQSearch.blur();
+      }
+      e.stopPropagation();   // 别让按键漏进终端快捷键
+    });
+  }
+  if (elQGroupBtns) {
+    elQGroupBtns.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-g]');
+      if (!btn) return;
+      qGroup = btn.getAttribute('data-g') || 'none';
+      Array.prototype.forEach.call(elQGroupBtns.children, function (b) {
+        b.classList.toggle('active', b === btn);
+      });
+      renderQueue();
     });
   }
   function stopCurrent() {
@@ -6524,6 +6690,65 @@
     } catch (e) {}
   }
   function trackKey(f) { return (f.name || '') + '|' + (f.size || 0) + '|' + (f.lastModified || 0); }
+
+  /* ---------------- 文件名兜底元数据（标签缺失时） ----------------
+     国内曲库大量文件没有内嵌标签，但文件名几乎都带「歌名 - 歌手」。
+     麻烦在两种约定混用：『告白气球 - 周杰伦』是 歌名-歌手，
+     『Westlife - My Love(Radio Edit)』却是 歌手-歌名。
+     批量启发式：同一批导入里，某侧名字出现 ≥2 次且从没在另一侧出现过，
+     就认定那一侧是歌手（歌手名会复用，歌名几乎不会）。
+     单文件没有这种证据时按最常见的 歌名-歌手 兜底；带紧连「-」（如 周杰伦-麦芽糖）
+     的歧义太大，只有左段已被认定为歌手时才拆。 */
+  var NAME_META_EXT = /\.(mp3|flac|m4a|m4b|wav|ogg|oga|aac|opus|webm|weba|aiff|ape|dsf|mp2)$/i;
+  function parseNameSplit(base) {
+    var s = String(base || '');
+    s = s.replace(/^\d+_(?=\S)/, '');                  // 序号前缀：1_告白气球
+    s = s.replace(/^\d{2,}[\s._-]+/, '');              // 两位数序号：01. / 01 - / 01_
+    s = s.replace(/[\s_]*[（(\[](?:Instrumental|Live|Demo|Remix|Radio Edit|伴奏|纯音乐|Cover|翻唱)[）)\]]\s*$/i, '');
+    if (!s) return null;
+    var parts = s.split(/\s+-\s+/);
+    if (parts.length >= 2 && parts[0].trim() && parts[1].trim())
+      return { left: parts[0].trim(), right: parts.slice(1).join(' - ').trim(), tight: false };
+    parts = s.split('-');
+    if (parts.length === 2 && parts[0].trim() && parts[1].trim())
+      return { left: parts[0].trim(), right: parts[1].trim(), tight: true };   // 周杰伦-麦芽糖
+    return null;
+  }
+  /* 输入一批文件名 → { 文件名: {title, artist} }，只含能推出来的。 */
+  function buildNameMetaMap(fileNames) {
+    var map = {}, leftCnt = {}, rightCnt = {}, artistSet = {}, splits = [];
+    (fileNames || []).forEach(function (fn) {
+      if (!NAME_META_EXT.test(fn)) return;
+      var sp = parseNameSplit(fn.replace(/\.[^.]+$/, ''));
+      if (!sp || sp.tight) return;
+      splits.push({ fn: fn, left: sp.left, right: sp.right });
+      leftCnt[normKey(sp.left)] = (leftCnt[normKey(sp.left)] || 0) + 1;
+      rightCnt[normKey(sp.right)] = (rightCnt[normKey(sp.right)] || 0) + 1;
+    });
+    splits.forEach(function (sp) {
+      var L = normKey(sp.left), R = normKey(sp.right);
+      var artistIsLeft = leftCnt[L] >= 2 && rightCnt[L] === 0 && rightCnt[R] === 0;
+      var meta = artistIsLeft ? { title: sp.right, artist: sp.left } : { title: sp.left, artist: sp.right };
+      map[sp.fn] = meta;
+      artistSet[normKey(meta.artist)] = true;
+    });
+    (fileNames || []).forEach(function (fn) {
+      if (map[fn] || !NAME_META_EXT.test(fn)) return;
+      var sp = parseNameSplit(fn.replace(/\.[^.]+$/, ''));
+      if (!sp || !sp.tight) return;
+      var L = normKey(sp.left), R = normKey(sp.right);
+      if (artistSet[L]) map[fn] = { title: sp.right, artist: sp.left };
+      else if (artistSet[R]) map[fn] = { title: sp.left, artist: sp.right };
+    });
+    return map;
+  }
+  /* 单文件兜底（音乐库旧记录重解析用，没有批量上下文）：只认 歌名 - 歌手。 */
+  function parseNameMetaSolo(base) {
+    var sp = parseNameSplit(base);
+    if (!sp || sp.tight) return null;
+    return { title: sp.left, artist: sp.right };
+  }
+
   function loadLibrary() {
     if (!radioDB) return;
     try {
@@ -6568,6 +6793,14 @@
         if (meta.title && !item.title) { item.title = meta.title; changed = true; }
         if (meta.artist && !item.artist) { item.artist = meta.artist; changed = true; }
         if (meta.album && !item.album) { item.album = meta.album; changed = true; }
+        /* 标签解析完还缺标题/歌手：按文件名「歌名 - 歌手」兜底（无批量证据，用最保守规则） */
+        if ((!item.title || !item.artist)) {
+          var nm = parseNameMetaSolo(rec.name || item.name);
+          if (nm) {
+            if (!item.title && nm.title) { item.title = nm.title; changed = true; }
+            if (!item.artist && nm.artist) { item.artist = nm.artist; changed = true; }
+          }
+        }
         if (meta.cover && !item.coverBlob) {
           item.coverBlob = meta.cover;
           item.coverUrl = URL.createObjectURL(meta.cover);
@@ -7886,10 +8119,12 @@
   });
 
 
-  function handleAudioFile(f, cb) {
+  function handleAudioFile(f, cb, nameMetaMap) {
     var reader = new FileReader();
     reader.onload = function () {
       var meta = parseAudioMeta(reader.result);
+      /* 标签缺什么就用文件名补什么（内嵌标签永远优先） */
+      var nm = (!meta.artist || !meta.title) ? ((nameMetaMap && nameMetaMap[f.name]) || null) : null;
       var item = {
         key: trackKey(f),
         name: f.name.replace(/\.[^.]+$/, ''),
@@ -7898,8 +8133,8 @@
         coverUrl: meta.cover ? URL.createObjectURL(meta.cover) : null,
         lrc: meta.lrc || null,
         lrcLines: parseLrc(meta.lrc),
-        title: meta.title || null,
-        artist: meta.artist || null,
+        title: meta.title || (nm && nm.title) || null,
+        artist: meta.artist || (nm && nm.artist) || null,
         album: meta.album || null
       };
       cb(item);
@@ -7922,6 +8157,8 @@
     var files = Array.prototype.slice.call((inputEl && inputEl.files) || []);
     var pending = 0, added = 0, lrcAdded = 0;
     var lrcPending = [];   // 尚未匹配到的 .lrc：等批量音频全部解析完再统一匹配
+    /* 文件名兜底元数据：批量统计一次（同批互为证据，比单文件猜得准） */
+    var nameMetaMap = buildNameMetaMap(files.map(function (f) { return f.name; }));
     function flushLrcPending() {
       if (!lrcPending.length) return;
       var rest = [];
@@ -7978,7 +8215,7 @@
           syncLibrary();
           elMeta.textContent = '已导入 ' + added + ' 首' + (lrcAdded ? '，歌词 ' + lrcAdded + ' 份' : '') + '（共 ' + queue.length + ' 首），点击 ▶ 开始播放';
         }
-      });
+      }, nameMetaMap);
     });
     if (!pending && !added && !lrcAdded && !lrcPending.length) elMeta.textContent = '没有可导入的音频文件';
   }

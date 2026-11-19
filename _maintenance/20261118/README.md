@@ -480,3 +480,42 @@ nupkg 内 exe = `9d7127cc…`，与 dist 一致。三处（dist / Electron 壳 /
 nupkg 内 `lib/net45/resources/WebTerm.exe` = `784bc7d9…`，与 dist 一致。
 三处（dist / `electron-dist\...\resources` / `%LOCALAPPDATA%\WebTerm\app-1.0.6\resources`）已同步
 201,183,597 B。`Settings.json` 已还原 `theme=light / bg_source=sonic`。
+
+## 32. 第九轮：播放队列窗口 — 搜索 + 按歌手/专辑分组
+
+- **搜索**：队列面板头部新增 `#q-search` 输入框。命中范围 = 歌名/文件名/歌手/专辑，
+  归一用 AI 点歌同一套 `normKey`（去书名号引号空格、小写、双向包含）。
+  过滤时计数显示「x / y 首」，无结果显示「没有匹配『…』的曲目」提示行；
+  Esc 在框内清空并收焦（stopPropagation，不触发浮层关闭）。
+- **分组**：`全部 / 歌手 / 专辑` 三态切换按钮。分组顺序 = 各组在队列里首次出现的
+  顺序（不重排队列）；组头显示组名 + 首数，点击折叠/展开（`qCollapsed` 记状态）。
+  无标签曲目归「未知歌手 / 未知专辑」。行下标始终是完整队列的真实下标，
+  过滤/分组态下点行播放、点 × 删除都落对（`data-qidx`）。
+- **文件名兜底元数据**（分组可用的前提）：用户曲库大量文件无内嵌标签（抽检
+  告白气球/Westlife/Run 三个 FLAC 的 VORBIS_COMMENT 只有 `encoder=Lavf58`），
+  且命名约定混用——『告白气球 - 周杰伦』是 歌名-歌手，『Westlife - My Love(Radio Edit)』
+  却是 歌手-歌名。批量启发式 `buildNameMetaMap()`：同批导入里某侧名字出现 ≥2 次
+  且从没在另一侧出现 → 认定该侧是歌手（歌手名跨文件复用、歌名不会）；
+  无证据时按最常见的 歌名-歌手 兜底；紧连「-」（周杰伦-麦芽糖）只在左段已被
+  认定为歌手时才拆。序号前缀（`1_` / `01.`）与尾注（`_(Instrumental)` 等）先剥掉。
+  内嵌标签永远优先，只补缺失字段；导入时随 `dbPut` 持久化，旧库记录在
+  `reparsingMeta` 里用单文件保守规则（只认 歌名-歌手）补。
+- **样式**：工具栏/搜索框/分组按钮/组头全套深浅主题双份（`body:is(.light,.on-light)`）。
+- **验证**：`_queue_test.cjs` 18/18（真导入 5 首多歌手曲目：搜索命中/计数/无结果
+  提示/Esc 清空/歌手分组聚合/折叠展开/专辑分组/未知专辑归组/过滤态点行播放/
+  active 保留/无 JS 异常）；回归歌词 11/11、译文条 22/22、商籁雾笺 19/19。
+  截图 `probe-queue-grouped.png`：周杰伦组正确聚合 告白气球+稻香。
+- 教训：无头 Chrome 里 `Page.captureScreenshot` 拍到的是最上层画面，超级终端
+  启动页 `hide()` 只淡出还盖着，截图前要 `classList.remove('super-on')` + 兜底 display:none。
+
+## 33. 本轮产物（1.0.9）
+
+| 文件 | 大小 B | SHA256 |
+| --- | --- | --- |
+| `dist\WebTerm.exe` | 201,186,958 | `62db8512cf4154ea45a1d63178c04ebd1a95e0836f799c1e2a7d7ae56cb9b455` |
+| `installer\WebTerm-Electron-Setup-1.0.9.exe` | 357,471,232 | `abad293b16364ff17ee3842018f1da40fed9015e6cd9ac6da3da0d2782fb3c70` |
+| `installer\WebTerm-1.0.9-full.nupkg` | 356,635,025 | `e88383b27983ed56c0c1db3a787405b3aab82a17a0850f37ecc4eefe7df419ae` |
+
+nupkg 内 `lib/net45/resources/WebTerm.exe` = `62db8512…`，与 dist 一致。
+三处（dist / `electron-dist\…\resources` / `%LOCALAPPDATA%\WebTerm\app-1.0.6\resources`）
+已同步 201,186,958 B。`Settings.json` 保持 `theme=light / bg_source=sonic`。

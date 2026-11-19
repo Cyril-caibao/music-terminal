@@ -1,0 +1,3 @@
+abad293b16364ff17ee3842018f1da40fed9015e6cd9ac6da3da0d2782fb3c70 *installer/WebTerm-Electron-Setup-1.0.9.exe
+e88383b27983ed56c0c1db3a787405b3aab82a17a0850f37ecc4eefe7df419ae *installer/WebTerm-1.0.9-full.nupkg
+62db8512cf4154ea45a1d63178c04ebd1a95e0836f799c1e2a7d7ae56cb9b455 *dist/WebTerm.exe
