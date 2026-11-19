@@ -1,0 +1,6 @@
+# WebTerm 1.0.11 产物 SHA256
+
+- dist/WebTerm.exe: 217e2fe0eb8a9d28db46280ae751a1acfe2dd7a154bd0b998610ee13413fe177
+- installer/WebTerm-Electron-Setup-1.0.11.exe: 75839b20988c193cf5b43e181345a5ec9938fc29437ee56a11c7faae0ea16f90
+- installer/WebTerm-1.0.11-full.nupkg: f101824de1f01574ce1cf084597b4449d1b65b75a67a4f5852fc43660f3bead1
+- nupkg 内 lib/net45/resources/WebTerm.exe = 217e2fe0…（与 dist 一致，已核对）

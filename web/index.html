@@ -617,7 +617,20 @@
     border: 1px solid rgba(156,255,223,0.22);
   }
   #dt-cover.nocover { display: none; }
-  #dt-cover-tip { font-size: 10.5px; color: var(--cy-dim); user-select: none; }
+  /* 无封面占位框：nocover 时替代隐藏的 img，保证始终有点击入口 */
+  #dt-cover-ph {
+    display: none;
+    width: 120px; height: 120px; border-radius: 10px;
+    border: 1px dashed rgba(156,255,223,0.35);
+    align-items: center; justify-content: center;
+    text-align: center;
+    color: var(--cy-dim); font-size: 11.5px;
+    cursor: pointer; user-select: none;
+    background: rgba(156,255,223,0.04);
+  }
+  #dt-cover-ph:hover { color: var(--cy-body); border-color: rgba(156,255,223,0.6); background: rgba(156,255,223,0.08); }
+  #dt-cover.nocover + #dt-cover-ph { display: flex; }
+  #dt-cover-tip { font-size: 10.5px; color: var(--cy-dim); user-select: none; cursor: pointer; }
   #dt-cover-tip:hover { color: var(--cy-body); }
   .dt-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
   .dt-field > span { font-size: 10.5px; letter-spacing: 1px; color: var(--cy-label); user-select: none; }
@@ -642,6 +655,12 @@
   body:is(.light, .on-light) #radio-details { border-color: rgba(0,120,100,0.22); }
   body:is(.light, .on-light) #radio-details-head { border-bottom-color: rgba(0,120,100,0.18); }
   body:is(.light, .on-light) #dt-cover { background: rgba(6,105,90,0.05); border-color: rgba(6,105,90,0.22); }
+  body:is(.light, .on-light) #dt-cover-ph {
+    border-color: rgba(0,120,100,0.3);
+    background: rgba(6,105,90,0.04);
+    color: #4a7a74;
+  }
+  body:is(.light, .on-light) #dt-cover-ph:hover { border-color: rgba(0,120,100,0.55); background: rgba(6,105,90,0.08); color: #14524a; }
   body:is(.light, .on-light) .dt-field input, body:is(.light, .on-light) .dt-field textarea {
     background: rgba(6,105,90,0.05);
     border-color: rgba(6,105,90,0.22);
@@ -2174,6 +2193,7 @@
       <div id="dt-form" style="display:none">
         <div id="dt-cover-row">
           <img id="dt-cover" alt="封面" title="点击更换封面" draggable="false">
+          <div id="dt-cover-ph">＋<br>添加封面</div>
           <div id="dt-cover-tip">点击封面更换图片<span id="dt-cover-pending" style="display:none"> · 新封面待保存</span></div>
         </div>
         <input type="file" id="dt-cover-file" accept="image/*" style="display:none">
@@ -6366,6 +6386,8 @@
   var elDtEmpty = document.getElementById('dt-empty');
   var elDtForm = document.getElementById('dt-form');
   var elDtCover = document.getElementById('dt-cover');
+  var elDtCoverPh = document.getElementById('dt-cover-ph');
+  var elDtCoverRow = document.getElementById('dt-cover-row');
   var elDtCoverFile = document.getElementById('dt-cover-file');
   var elDtCoverPending = document.getElementById('dt-cover-pending');
   var elDtTitle = document.getElementById('dt-title');
@@ -6446,7 +6468,9 @@
     populateDetails();
     if (elMeta) elMeta.textContent = '已保存歌曲信息';
   }
-  if (elDtCover) elDtCover.addEventListener('click', function () {
+  /* 绑在整行：无封面时 img 被 nocover 隐藏、由占位框顶上，
+     绑 img 本身会导致无封面的歌永远点不到换图入口 */
+  if (elDtCoverRow) elDtCoverRow.addEventListener('click', function () {
     if (dtIdx >= 0 && queue[dtIdx]) elDtCoverFile.click();
   });
   if (elDtCoverFile) elDtCoverFile.addEventListener('change', function () {
