@@ -66,11 +66,12 @@
   /* 白主题下玻璃底的边框/悬停底/选中底也跟着调深，否则浅青描边在白底上等于没有 */
   body:is(.light, .on-light) #appearancePanel,
   body:is(.light, .on-light) #radio-lyrics, body:is(.light, .on-light) #radio-eq, body:is(.light, .on-light) #radio-queue,
+  body:is(.light, .on-light) #radio-details,
   body:is(.light, .on-light) #aiPanel, body:is(.light, .on-light) #fileTree,
   body:is(.light, .on-light) #usersPanel, body:is(.light, .on-light) #compPanel,
   body:is(.light, .on-light) #settingsPanel { border-color: rgba(0,120,100,0.22); }
   body:is(.light, .on-light) #radio-lyrics-head, body:is(.light, .on-light) #radio-eq-head,
-  body:is(.light, .on-light) #radio-queue-head, body:is(.light, .on-light) #aiPanel-head,
+  body:is(.light, .on-light) #radio-queue-head, body:is(.light, .on-light) #radio-details-head, body:is(.light, .on-light) #aiPanel-head,
   body:is(.light, .on-light) #usersPanel-head, body:is(.light, .on-light) #compPanel-head,
   body:is(.light, .on-light) #appearancePanel .ap-head { border-bottom-color: rgba(0,120,100,0.18); }
   body:is(.light, .on-light) .panel-x:hover { color: #6b4e00; background: rgba(107,78,0,0.10); }
@@ -596,6 +597,63 @@
   .q-item .q-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .q-item .q-x { color: var(--cy-dim); padding: 0 2px; }
   .q-item .q-x:hover { color: var(--cy-hi); }
+  .q-item .q-edit { color: var(--cy-dim); padding: 0 3px; font-size: 11px; }
+  .q-item .q-edit:hover { color: var(--cy-hi); }
+  /* 歌曲详情面板 */
+  #radio-details {
+    position: fixed; top: 46px; right: 12px; z-index: 60;
+    display: none; flex-direction: column;
+    width: min(320px, 94vw); max-height: 78vh;
+    overflow: hidden;
+  }
+  #radio-details.show { display: flex; }
+  #radio-details-body { flex: 1; overflow-y: auto; min-height: 0; padding: 10px 12px 12px; }
+  #dt-empty { color: var(--cy-dim); font-size: 12px; text-align: center; padding: 18px 0; user-select: none; }
+  #dt-cover-row { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 10px; }
+  #dt-cover {
+    width: 120px; height: 120px; border-radius: 10px;
+    object-fit: cover; cursor: pointer;
+    background: rgba(156,255,223,0.06);
+    border: 1px solid rgba(156,255,223,0.22);
+  }
+  #dt-cover.nocover { display: none; }
+  #dt-cover-tip { font-size: 10.5px; color: var(--cy-dim); user-select: none; }
+  #dt-cover-tip:hover { color: var(--cy-body); }
+  .dt-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
+  .dt-field > span { font-size: 10.5px; letter-spacing: 1px; color: var(--cy-label); user-select: none; }
+  .dt-field input, .dt-field textarea {
+    background: rgba(156,255,223,0.06);
+    border: 1px solid rgba(156,255,223,0.22);
+    border-radius: 8px;
+    color: var(--cy-body);
+    font-size: 12px; padding: 6px 9px; outline: none;
+    font-family: inherit; resize: vertical;
+  }
+  .dt-field input:focus, .dt-field textarea:focus { border-color: rgba(156,255,223,0.55); background: rgba(156,255,223,0.10); }
+  #dt-actions { display: flex; justify-content: flex-end; }
+  #dt-save {
+    background: rgba(156,255,223,0.14);
+    color: var(--cy-accent);
+    border: 1px solid rgba(156,255,223,0.4);
+    border-radius: 8px; padding: 6px 18px;
+    font-size: 12px; cursor: pointer;
+  }
+  #dt-save:hover { background: rgba(156,255,223,0.24); }
+  body:is(.light, .on-light) #radio-details { border-color: rgba(0,120,100,0.22); }
+  body:is(.light, .on-light) #radio-details-head { border-bottom-color: rgba(0,120,100,0.18); }
+  body:is(.light, .on-light) #dt-cover { background: rgba(6,105,90,0.05); border-color: rgba(6,105,90,0.22); }
+  body:is(.light, .on-light) .dt-field input, body:is(.light, .on-light) .dt-field textarea {
+    background: rgba(6,105,90,0.05);
+    border-color: rgba(6,105,90,0.22);
+    color: #14524a;
+  }
+  body:is(.light, .on-light) .dt-field input:focus, body:is(.light, .on-light) .dt-field textarea:focus {
+    border-color: rgba(6,105,90,0.5); background: rgba(6,105,90,0.08);
+  }
+  body:is(.light, .on-light) #dt-save {
+    background: rgba(6,105,90,0.10); color: #06695a; border-color: rgba(6,105,90,0.4);
+  }
+  body:is(.light, .on-light) #dt-save:hover { background: rgba(6,105,90,0.18); }
   /* 队列工具栏：搜索 + 分组切换 */
   #radio-queue-tools {
     display: flex; align-items: center; gap: 6px;
@@ -963,7 +1021,7 @@
   /* 歌词 / 均衡器 / 播放队列 / 外观 / 顶栏：mineradio 原版透明玻璃材质
      （#bottom-bar.visible 同款——背景 rgba(0,0,0,.05) 极透 + blur(12px) saturate(1.8)
      brightness(1.16) + 白色内高光 + 多层柔影），边框沿用视觉控制台青色细边、圆角 20px */
-  #radio-lyrics, #radio-eq, #radio-queue, #appearancePanel,
+  #radio-lyrics, #radio-eq, #radio-queue, #radio-details, #appearancePanel,
   #helpPanel, #importPanel, #imgPanel, #usersPanel, #compPanel, #settingsPanel, header,
   #lattice-chrome, #viewMenu {
     background: rgba(0,0,0,0.05);
@@ -976,13 +1034,13 @@
     backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
     -webkit-backdrop-filter: blur(12px) saturate(1.8) brightness(1.16);
   }
-  #radio-lyrics-head, #radio-eq-head, #radio-queue-head, #aiPanel-head,
+  #radio-lyrics-head, #radio-eq-head, #radio-queue-head, #radio-details-head, #aiPanel-head,
   #helpPanel-head, #importPanel-head, #imgPanel-head {
     border-bottom-color: rgba(0,245,212,0.12);
     cursor: grab; user-select: none;
   }
   #radio-lyrics-head:active, #radio-eq-head:active,
-  #radio-queue-head:active, #aiPanel-head:active { cursor: grabbing; }
+  #radio-queue-head:active, #radio-details-head:active, #aiPanel-head:active { cursor: grabbing; }
   /* 浮层面板内细滚动条 */
   #radio-lyrics-body::-webkit-scrollbar, #radio-eq-body::-webkit-scrollbar,
   #radio-queue-list::-webkit-scrollbar { width: 6px; }
@@ -991,7 +1049,7 @@
   #radio-lyrics-body::-webkit-scrollbar-track, #radio-eq-body::-webkit-scrollbar-track,
   #radio-queue-list::-webkit-scrollbar-track { background: transparent; }
   #radio-lyrics.show, #radio-eq.show { display: flex; }
-  #radio-lyrics-head, #radio-eq-head, #radio-queue-head,
+  #radio-lyrics-head, #radio-eq-head, #radio-queue-head, #radio-details-head,
   #helpPanel-head, #importPanel-head, #imgPanel-head {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 12px;
@@ -1350,7 +1408,7 @@
     body:is(.tree-on, .tree-peek) #fileTree { width: min(var(--tree-w, 280px), 62vw); }
 
     /* 歌词 / EQ 浮层：小屏拉宽（原 46vw 太窄），顶部避让 header */
-    #radio-lyrics, #radio-eq, #radio-queue {
+    #radio-lyrics, #radio-eq, #radio-queue, #radio-details {
       width: min(360px, 94vw);
       right: 3vw; top: 52px;
       max-height: 68vh;
@@ -2053,13 +2111,13 @@
       <input type="range" id="radio-volume" class="r-slider" min="0" max="100" value="80" title="音量">
     </div>
     <div id="radio-btnrow">
-      <button id="rbtn-shuffle" class="rbtn" title="随机播放">⇄</button>
       <button id="rbtn-prev" class="rbtn" title="上一首">⏮</button>
       <button id="rbtn-play" class="rbtn rbtn-main" title="播放/暂停">▶</button>
       <button id="rbtn-next" class="rbtn" title="下一首">⏭</button>
-      <button id="rbtn-loop" class="rbtn" title="循环模式">↻</button>
+      <button id="rbtn-mode" class="rbtn" title="播放模式：顺序播放">→</button>
       <button id="rbtn-lyrics" class="rbtn" title="歌词">词</button>
       <button id="rbtn-eq" class="rbtn" title="均衡器">EQ</button>
+      <button id="rbtn-info" class="rbtn" title="歌曲详情（封面 / 标签 / 歌词）">ℹ</button>
       <span class="spacer"></span>
       <button id="rbtn-view" class="rbtn" title="视图：音域 / 绘光 / 凝彩 / 商籁 / 雾笺 / 封面拼贴"
               aria-haspopup="menu" aria-expanded="false">视</button>
@@ -2104,6 +2162,30 @@
       </div>
     </div>
     <div id="radio-queue-list"></div>
+  </div>
+  <!-- 歌曲详情：改封面 / 标签 / 歌词，保存写回 IndexedDB -->
+  <div id="radio-details" class="float-panel">
+    <div id="radio-details-head">
+      <span>歌曲详情</span><span class="q-count" id="dt-who"></span>
+      <button class="panel-x" data-close="details" title="关闭">✕</button>
+    </div>
+    <div id="radio-details-body">
+      <div id="dt-empty" style="display:none">先播放或选中一首歌</div>
+      <div id="dt-form" style="display:none">
+        <div id="dt-cover-row">
+          <img id="dt-cover" alt="封面" title="点击更换封面" draggable="false">
+          <div id="dt-cover-tip">点击封面更换图片<span id="dt-cover-pending" style="display:none"> · 新封面待保存</span></div>
+        </div>
+        <input type="file" id="dt-cover-file" accept="image/*" style="display:none">
+        <label class="dt-field"><span>标题</span><input id="dt-title" type="text" autocomplete="off" spellcheck="false"></label>
+        <label class="dt-field"><span>歌手</span><input id="dt-artist" type="text" autocomplete="off" spellcheck="false"></label>
+        <label class="dt-field"><span>专辑</span><input id="dt-album" type="text" autocomplete="off" spellcheck="false"></label>
+        <label class="dt-field"><span>歌词（LRC，可留空）</span><textarea id="dt-lrc" rows="7" spellcheck="false"></textarea></label>
+        <div id="dt-actions">
+          <button id="dt-save" type="button">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div id="radio-lyrics" class="float-panel">
     <div id="radio-lyrics-head">
@@ -5762,8 +5844,7 @@
   var elSeek  = document.getElementById('radio-seek');
   var elVol   = document.getElementById('radio-volume');
   var elPlay  = document.getElementById('rbtn-play');
-  var elLoop  = document.getElementById('rbtn-loop');
-  var elShuffle = document.getElementById('rbtn-shuffle');
+  var elMode  = document.getElementById('rbtn-mode');   // 播放模式（四态合一）
   var elQlist = document.getElementById('radio-queue-list');
   var elQcount= document.getElementById('radio-qcount');
   var elQueue = document.getElementById('radio-queue');
@@ -6159,17 +6240,21 @@
     var num = document.createElement('span'); num.className = 'q-num'; num.textContent = idx === current ? '▶' : (idx + 1);
     var name = document.createElement('span'); name.className = 'q-name';
     name.textContent = (item.title || item.name) + (showArtist && item.artist ? ' · ' + item.artist : '');
+    var pen = document.createElement('span'); pen.className = 'q-edit'; pen.textContent = '✎'; pen.title = '歌曲详情（封面 / 标签 / 歌词）';
     var x = document.createElement('span'); x.className = 'q-x'; x.textContent = '×';
-    row.appendChild(num); row.appendChild(name); row.appendChild(x);
+    row.appendChild(num); row.appendChild(name); row.appendChild(pen); row.appendChild(x);
     row.addEventListener('click', function (ev) {
       if (ev.target === x) {
         dbDelete(queue[idx].key);   // 从音乐库移除
         queue.splice(idx, 1); if (idx < current) current--; if (idx === current) stopCurrent();
+        if (idx === dtIdx) { dtIdx = -1; populateDetails(); }
+        else if (idx < dtIdx) dtIdx--;
         renderQueue();
         if (elQcount) elQcount.textContent = queue.length + ' 首';
         syncLibrary();              // 曲库变了，同步给 AI
         return;
       }
+      if (ev.target === pen) { openDetails(idx); return; }
       playAt(idx);
     });
     return row;
@@ -6272,6 +6357,111 @@
       renderQueue();
     });
   }
+
+  /* ---------------- 歌曲详情：改封面 / 标签 / 歌词 ----------------
+     队列行 ✎ 或控制条 ℹ 打开；保存写回内存对象 + IndexedDB（dbMerge 保留音频 blob）。
+     封面选图后先本地预览，点「保存」才生效（避免误选直接覆盖）。 */
+  var elDetails = document.getElementById('radio-details');
+  var elDtWho = document.getElementById('dt-who');
+  var elDtEmpty = document.getElementById('dt-empty');
+  var elDtForm = document.getElementById('dt-form');
+  var elDtCover = document.getElementById('dt-cover');
+  var elDtCoverFile = document.getElementById('dt-cover-file');
+  var elDtCoverPending = document.getElementById('dt-cover-pending');
+  var elDtTitle = document.getElementById('dt-title');
+  var elDtArtist = document.getElementById('dt-artist');
+  var elDtAlbum = document.getElementById('dt-album');
+  var elDtLrc = document.getElementById('dt-lrc');
+  var elDtSave = document.getElementById('dt-save');
+  var dtIdx = -1;             // 正在编辑的队列下标（不一定是正在播放的）
+  var dtPendingCover = null;  // 待保存的新封面（File/Blob）
+
+  function populateDetails() {
+    if (!elDetails) return;
+    var it = (dtIdx >= 0 && queue[dtIdx]) ? queue[dtIdx] : null;
+    if (!it) {
+      if (elDtEmpty) elDtEmpty.style.display = '';
+      if (elDtForm) elDtForm.style.display = 'none';
+      if (elDtWho) elDtWho.textContent = '';
+      return;
+    }
+    if (elDtEmpty) elDtEmpty.style.display = 'none';
+    if (elDtForm) elDtForm.style.display = '';
+    if (elDtWho) elDtWho.textContent = (dtIdx + 1) + ' / ' + queue.length;
+    if (elDtTitle) elDtTitle.value = it.title || '';
+    if (elDtArtist) elDtArtist.value = it.artist || '';
+    if (elDtAlbum) elDtAlbum.value = it.album || '';
+    if (elDtLrc) elDtLrc.value = it.lrc || '';
+    if (elDtCover) {
+      elDtCover.classList.toggle('nocover', !it.coverUrl);
+      if (it.coverUrl) elDtCover.src = it.coverUrl;
+    }
+    if (elDtCoverPending) elDtCoverPending.style.display = dtPendingCover ? '' : 'none';
+  }
+  function openDetails(idx) {
+    if (!queue.length) { dtIdx = -1; }
+    else if (typeof idx === 'number' && idx >= 0 && idx < queue.length) dtIdx = idx;
+    else if (current >= 0 && current < queue.length) dtIdx = current;
+    else dtIdx = 0;
+    dtPendingCover = null;
+    /* 先填充内容再开窗：showPanel 里的 placePanel 按开窗时尺寸放置，
+       若先开后填（空提示态很矮），详情表单长高后会溢出视口底。 */
+    populateDetails();
+    if (elDetails && !elDetails.classList.contains('show')) showPanel('details');
+    /* 兜底夹取：多面板避让可能把窗推到视口外，开完后按实际尺寸拉回来 */
+    if (elDetails) {
+      var r = elDetails.getBoundingClientRect();
+      if (r.width && r.height && (r.bottom > window.innerHeight - 12 || r.left < 12)) {
+        elDetails.style.top = Math.max(46, Math.round(window.innerHeight - r.height - 12)) + 'px';
+        elDetails.style.left = Math.max(12, Math.round(Math.min(r.left, window.innerWidth - r.width - 12))) + 'px';
+        elDetails.style.right = 'auto';
+      }
+    }
+  }
+  function saveDetails() {
+    var it = (dtIdx >= 0 && queue[dtIdx]) ? queue[dtIdx] : null;
+    if (!it) return;
+    it.title = elDtTitle.value.trim() || null;
+    it.artist = elDtArtist.value.trim() || null;
+    it.album = elDtAlbum.value.trim() || null;
+    var lrcText = elDtLrc.value;
+    if (lrcText !== (it.lrc || '')) {
+      it.lrc = lrcText || null;
+      it.lrcLines = parseLrc(it.lrc);
+    }
+    var rec = { name: it.name, title: it.title, artist: it.artist, album: it.album, lrc: it.lrc };
+    if (dtPendingCover) {
+      if (it.coverUrl) { try { URL.revokeObjectURL(it.coverUrl); } catch (e) {} }
+      it.coverBlob = dtPendingCover;
+      it.coverUrl = URL.createObjectURL(dtPendingCover);
+      rec.coverBlob = it.coverBlob;
+      dtPendingCover = null;
+    }
+    dbMerge(it.key, rec);
+    if (dtIdx === current) { setMeta(it.name, dtIdx, queue.length); renderLrc(); }
+    renderQueue();
+    latticeSync();       // 拼贴墙上海报的标题/封面跟着换
+    syncLibrary();
+    reportNowPlaying();
+    populateDetails();
+    if (elMeta) elMeta.textContent = '已保存歌曲信息';
+  }
+  if (elDtCover) elDtCover.addEventListener('click', function () {
+    if (dtIdx >= 0 && queue[dtIdx]) elDtCoverFile.click();
+  });
+  if (elDtCoverFile) elDtCoverFile.addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    this.value = '';
+    if (!f || dtIdx < 0 || !queue[dtIdx]) return;
+    dtPendingCover = f;
+    if (elDtCover) {
+      elDtCover.classList.remove('nocover');
+      elDtCover.src = URL.createObjectURL(f);
+    }
+    if (elDtCoverPending) elDtCoverPending.style.display = '';
+  });
+  if (elDtSave) elDtSave.addEventListener('click', saveDetails);
+  document.getElementById('rbtn-info').addEventListener('click', function () { openDetails(); });
   function stopCurrent() {
     /* 先记现场再清 src：removeAttribute('src') + load() 之后 currentTime 归零、
        曲目引用也没了，Cyril-continue 就无从「接着刚才那首那一刻」放。 */
@@ -6543,6 +6733,8 @@
     setMeta(queue[idx].name, idx, queue.length);
     renderLrc();
     renderQueue();
+    /* 详情面板开着但还没选中曲目（之前是空提示态）：跟着补上这首 */
+    if (elDetails && elDetails.classList.contains('show') && dtIdx < 0) populateDetails();
     latticeSync();   // 拼贴开着时：重建海报墙（hero 换人）+ 相机飞过去
     // 真实播放状态由 play/pause 事件驱动按钮；
     // 若浏览器自动播放策略拦截（如导入后自动播），则保持 ▶ 并提示用户点击播放
@@ -6613,22 +6805,47 @@
   });
   document.getElementById('rbtn-prev').addEventListener('click', prev);
   document.getElementById('rbtn-next').addEventListener('click', next);
-  /* 随机 / 循环：抽成具名函数，按钮点击与 AI 指令（__cyrilPlayerCmd）共用同一套状态 */
+  /* 随机 / 循环：抽成具名函数，按钮点击与 AI 指令（__cyrilPlayerCmd）共用同一套状态。
+     UI 上两按钮合成一个四态按钮（顺序→列表循环→单曲循环→随机），setShuffle /
+     setLoopMode 保留为底层状态接口，AI 指令行为不变。 */
+  var PLAY_MODE_ORDER = ['off', 'all', 'one', 'shuffle'];
+  var MODE_META = {
+    off:     { icon: '→',  label: '顺序播放' },
+    all:     { icon: '↻',  label: '列表循环' },
+    one:     { icon: '↻1', label: '单曲循环' },
+    shuffle: { icon: '⇄',  label: '随机播放' }
+  };
+  function playMode() { return shuffleOn ? 'shuffle' : loopMode; }
+  function syncModeBtn() {
+    var m = playMode(), meta = MODE_META[m] || MODE_META.off;
+    if (elMode) {
+      elMode.textContent = meta.icon;
+      elMode.title = '播放模式：' + meta.label + '（点击切换）';
+      elMode.classList.toggle('on', m !== 'off');
+    }
+  }
+  function setPlayMode(m) {
+    if (m === 'shuffle') { shuffleOn = true; loopMode = 'off'; }
+    else {
+      shuffleOn = false;
+      loopMode = (PLAY_MODE_ORDER.indexOf(m) >= 0 && m !== 'shuffle') ? m : 'off';
+    }
+    syncModeBtn();
+  }
   function setShuffle(on) {
     shuffleOn = !!on;
-    elShuffle.classList.toggle('on', shuffleOn);
-    elShuffle.title = shuffleOn ? '随机播放：开' : '随机播放：关';
+    if (shuffleOn) loopMode = 'off';   // 四态合一：随机与循环互斥
+    syncModeBtn();
   }
   function setLoopMode(m) {
     loopMode = (['off', 'all', 'one'].indexOf(m) >= 0) ? m : 'off';
-    elLoop.classList.toggle('on', loopMode !== 'off');
-    elLoop.title = loopMode === 'off' ? '循环模式：关'
-      : (loopMode === 'all' ? '循环模式：全部' : '循环模式：单曲');
+    shuffleOn = false;                 // AI 指令切循环时，把挂着的随机标志清掉
+    syncModeBtn();
   }
-  document.getElementById('rbtn-shuffle').addEventListener('click', function () { setShuffle(!shuffleOn); });
-  elLoop.addEventListener('click', function () {
-    setLoopMode(loopMode === 'off' ? 'all' : (loopMode === 'all' ? 'one' : 'off'));
+  if (elMode) elMode.addEventListener('click', function () {
+    setPlayMode(PLAY_MODE_ORDER[(PLAY_MODE_ORDER.indexOf(playMode()) + 1) % PLAY_MODE_ORDER.length]);
   });
+  syncModeBtn();
 
   /* ---------------- 音乐库持久化（免重复导入） ----------------
      IndexedDB 'cyril-radio' / store 'tracks'：保存音频 Blob + 封面 + 歌词 + 元数据。
@@ -7091,6 +7308,7 @@
   function panelMap() {
     return {
       queue: elQueue, lyrics: elLyrics, eq: elEq,
+      details: elDetails,
       help: elHelp, import: elImport, img: elImg,
       users: elUsers, comp: elComp, settings: elSettings
     };
@@ -7118,7 +7336,7 @@
   };
   /* 按钮开合两态（与下方「绘光」按钮同款实心样式）：窗口开着 = 按钮实心高亮 */
   function syncPanelBtns() {
-    var map = { 'rbtn-queue': elQueue, 'rbtn-lyrics': elLyrics, 'rbtn-eq': elEq };
+    var map = { 'rbtn-queue': elQueue, 'rbtn-lyrics': elLyrics, 'rbtn-eq': elEq, 'rbtn-info': elDetails };
     Object.keys(map).forEach(function (id) {
       var b = document.getElementById(id);
       if (b && map[id]) b.classList.toggle('on', map[id].classList.contains('show'));
@@ -8428,6 +8646,7 @@
   makeDraggable(document.getElementById('radio-lyrics'), document.getElementById('radio-lyrics-head'));
   makeDraggable(document.getElementById('radio-eq'), document.getElementById('radio-eq-head'));
   makeDraggable(document.getElementById('radio-queue'), document.getElementById('radio-queue-head'));
+  makeDraggable(document.getElementById('radio-details'), document.getElementById('radio-details-head'));
   makeDraggable(document.getElementById('aiPanel'), document.getElementById('aiPanel-head'));
   /* 【外观】也走这一套（五个浮层统一标准：可拖 + 开出来自动避让 + ✕ 关闭） */
   makeDraggable(document.getElementById('appearancePanel'), document.getElementById('appearancePanel-head'));

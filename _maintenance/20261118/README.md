@@ -519,3 +519,39 @@ nupkg 内 `lib/net45/resources/WebTerm.exe` = `784bc7d9…`，与 dist 一致。
 nupkg 内 `lib/net45/resources/WebTerm.exe` = `62db8512…`，与 dist 一致。
 三处（dist / `electron-dist\…\resources` / `%LOCALAPPDATA%\WebTerm\app-1.0.6\resources`）
 已同步 201,186,958 B。`Settings.json` 保持 `theme=light / bg_source=sonic`。
+
+## 34. 第十轮：播放模式四态合一 + 歌曲详情（改封面/标签/歌词）
+
+- **播放模式单按钮**：`rbtn-shuffle`（⇄）+ `rbtn-loop`（↻）合并为 `rbtn-mode`，
+  四态循环 顺序(→) → 列表循环(↻) → 单曲循环(↻1) → 随机(⇄)，非顺序态高亮。
+  `setShuffle` / `setLoopMode` 保留为底层接口（AI 指令 `shuffle` / `loop` 不变），
+  但按四态模型互斥：设循环清随机标志、设随机清循环模式，按钮图标/标题始终同步。
+- **歌曲详情面板** `#radio-details`（float-panel 家族：panelMap / placePanel 避让 /
+  makeDraggable / data-close 全套接入，控制条 ℹ 与队列行 ✎ 两个入口）：
+  - 封面：点预览图换图（选图先本地预览 + 「新封面待保存」标记，点保存才生效，
+    旧 coverUrl revoke）；
+  - 标签：标题/歌手/专辑输入框，空值存 null；
+  - 歌词：LRC 文本域，保存后 `parseLrc` 重解析，正编辑的是当前曲目时刷新
+    歌词面板/大字译文条；
+  - 保存统一走 `dbMerge`（标签+歌词+coverBlob 一次写回，保留音频 blob），
+    队列行/播放条/拼贴墙/曲库同步/正在播放上报全链路刷新。
+- **修复**：详情面板忘了 `position: fixed`（.float-panel 类不含定位，各面板自己
+  声明）——样式里 top/left 全部无效、面板按 static 流到文档末尾被截断；
+  以及「先开后填」会让 placePanel 按空提示态的小尺寸放置 → 改为先 populate 再
+  showPanel，另加开窗后视口夹取兜底。
+- **验证**：`_details_test.cjs` 22/22（四态循环/AI 指令兼容/面板填充/改标签后队列行
+  与播放条同步/改歌词后歌词面板渲染/换封面预览与待保存标记/IndexedDB 持久化核对
+  (artist+coverBlob+lrc)/行✎定位第2首/视口内完整显示/无 JS 异常）；回归队列 18、
+  歌词 11、译文条 22、商籁雾笺 19 全过。截图 `probe-details-panel.png`。
+
+## 35. 本轮产物（1.0.10）
+
+| 文件 | 大小 B | SHA256 |
+| --- | --- | --- |
+| `dist\WebTerm.exe` | 201,190,328 | `a02321fb5c03e6476d11370931a58bf3e7d2078c8ac0c5830ec0538de4b45b96` |
+| `installer\WebTerm-Electron-Setup-1.0.10.exe` | 357,473,792 | `ebf421fd7a5cdb8166ba681d2713482be9883658a4faa1189130fab8d18c22c3` |
+| `installer\WebTerm-1.0.10-full.nupkg` | 356,638,321 | `af7f11204dfc5f91bda5f8e6dffaea1d3c1c1409189e6145b94ac3e9f10a292f` |
+
+nupkg 内 `lib/net45/resources/WebTerm.exe` = `a02321fb…`，与 dist 一致。
+三处（dist / `electron-dist\…\resources` / `%LOCALAPPDATA%\WebTerm\app-1.0.6\resources`）
+已同步 201,190,328 B。`Settings.json` 保持 `theme=light / bg_source=sonic`。
