@@ -15,8 +15,8 @@ android {
         applicationId = "com.multitrack.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 65
-        versionName = "3.52"
+        versionCode = 72
+        versionName = "3.59"
 
         ndk {
             // ONNX Runtime 的 .so 按 ABI 分；只留手机真正会用的两个，

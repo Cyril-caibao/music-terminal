@@ -13,6 +13,7 @@ import com.multitrack.app.player.data.PlayerDb
 import com.multitrack.app.player.data.QueueRepository
 import com.multitrack.app.player.data.LyricsRepository
 import com.multitrack.app.player.data.ScanSettingsStore
+import com.multitrack.app.player.data.SongEntity
 import com.multitrack.app.player.data.TagWriter
 import com.multitrack.app.player.playback.PlaybackManager
 import kotlinx.coroutines.CoroutineScope
@@ -124,7 +125,26 @@ class AppContainer(private val app: Application) {
         ensureIndexed(force = true)
     }
 
+    // ── 外部打开（文件管理器「用 CyrilMusic 打开」）────────────────────────
+
+    /** 把外部传入的 uri 解析成曲库里的一条（不在库里就先补进去）；认不出返回 null */
+    suspend fun resolveExternal(uri: android.net.Uri): SongEntity? =
+        runCatching { scanner.importUri(uri) }.getOrNull()
+
+    /** 「用 CyrilMusic 播放」已接管播放器：扫描完成后的「恢复上次播放」不能再覆盖它 */
+    private var playbackClaimed = false
+
+    /** 「播放」入口：解析 → 单独成队 → 立即开播。false 表示这个文件认不出来 */
+    suspend fun playExternal(uri: android.net.Uri): Boolean = runCatching {
+        playbackClaimed = true
+        val song = resolveExternal(uri) ?: return@runCatching false
+        val qid = queueRepo.replaceExternal(listOf(song.id)) ?: return@runCatching false
+        playback.activate(qid, autoPlay = true, startIndex = 0)
+        true
+    }.getOrDefault(false)
+
     private suspend fun restoreLastPlayback() = runCatching {
+        if (playbackClaimed) return@runCatching
         val active = db.queueDao().activeQueue() ?: return@runCatching
         if (db.queueDao().count(active.id) == 0) return@runCatching
         playback.activate(active.id, autoPlay = false)

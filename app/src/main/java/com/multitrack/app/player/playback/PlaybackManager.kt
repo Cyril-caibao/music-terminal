@@ -2,6 +2,7 @@ package com.multitrack.app.player.playback
 
 import android.content.ComponentName
 import android.content.Context
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.MediaMetadata
@@ -94,18 +95,94 @@ class PlaybackManager(
             }
         }
 
-        override fun onPlayerError(error: PlaybackException) {
-            // 把错误码直接摆到界面上：否则「歌放不了」在日志之外完全不可见
+        // 成功响起来一次就清空错误恢复的预算：只统计「连续」失败，播顺了就重新计数
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) errTotal = 0
+        }
+
+        override fun onPlayerError(error: PlaybackException) = autoRecover(error)
+
+        override fun onPlayerErrorChanged(error: PlaybackException?) {
+            if (error == null) _state.value = _state.value.copy(error = null)
+        }
+    }
+
+    // ===== 坏文件自动恢复 =====
+    /** 正在恢复的那首歌（切歌就重新计次） */
+    private var errSongId = -1L
+    /** 这首歌已经试过几次「跳过坏段」 */
+    private var errAttempts = 0
+    /** 连续失败总预算：防止整个队列坏光时陷入「报错→跳→报错」的死循环 */
+    private var errTotal = 0
+
+    /**
+     * 播放报错时的自动恢复：
+     * - **曲子中途坏一段**（解码失败、文件破损）：从报错点往后跳，步长逐次加大
+     *   （2s → 5s → 10s），re-prepare 后接着放这一首 —— 跳过坏的地方继续响；
+     * - 跳 3 次还在报错，或者坏段已经贴着曲尾（往后没得跳了）：自动切到下一首继续播；
+     * - 连续失败超过 10 次就停下并报错，避免整个队列都是坏文件时无限空转。
+     */
+    private fun autoRecover(error: PlaybackException) {
+        val c = controller
+        if (c == null || c.mediaItemCount == 0) {
             _state.value = _state.value.copy(
                 isPlaying = false,
                 error = "播放失败 ${error.errorCodeName}" +
                     (error.cause?.let { "：${it.javaClass.simpleName}" } ?: "")
             )
+            return
         }
 
-        override fun onPlayerErrorChanged(error: PlaybackException?) {
-            if (error == null) _state.value = _state.value.copy(error = null)
+        val idx = c.currentMediaItemIndex
+        val songId = songs.getOrNull(idx)?.id
+            ?: c.currentMediaItem?.mediaId?.toLongOrNull() ?: -1L
+        if (songId != errSongId) { errSongId = songId; errAttempts = 0 }
+        errAttempts++
+        errTotal++
+        if (errTotal > 10) {
+            runCatching { c.pause() }
+            _state.value = _state.value.copy(
+                isPlaying = false,
+                error = "连续多次播放失败，已停止自动恢复（${error.errorCodeName}）"
+            )
+            return
         }
+
+        val wasPlaying = _state.value.isPlaying || c.playWhenReady
+        val dur = c.duration
+        val pos = c.currentPosition.coerceAtLeast(0)
+        // 坏段贴着曲尾：再往后跳没意义，直接换下一首
+        val tailBad = dur != C.TIME_UNSET && dur > 0 && pos + 1_000 >= dur
+
+        var jumpTo = idx
+        val msg: String
+        if (errAttempts <= 3 && !tailBad) {
+            // 中途坏一段：往后跳过坏的地方，步长 1s/4s/9s 递增
+            val step = 1_000L * errAttempts * errAttempts
+            val target = if (dur != C.TIME_UNSET && dur > 0) {
+                (pos + step).coerceAtMost(dur - 1)
+            } else pos + step
+            runCatching {
+                c.prepare()
+                c.seekTo(target)
+                if (wasPlaying) c.play()
+            }
+            msg = "这段文件有点问题，已跳过损坏的部分继续播放"
+        } else {
+            jumpTo = (idx + 1) % c.mediaItemCount
+            runCatching {
+                c.prepare()
+                c.seekToDefaultPosition(jumpTo)
+                if (wasPlaying) c.play()
+            }
+            msg = "这首歌损坏的部分太多，已自动切到下一首"
+        }
+        expectedIndex = jumpTo
+        _state.value = _state.value.copy(
+            index = jumpTo,
+            songId = songs.getOrNull(jumpTo)?.id ?: songId,
+            error = msg
+        )
     }
 
     fun connect() {
@@ -471,6 +548,19 @@ class PlaybackManager(
     }
 
     fun onAppBackground() = persistCursor()
+
+    /**
+     * 冷启动恢复：打开应用回到上一次播放的歌曲（停在原来的进度，**不自动出声**）。
+     * 游标由 MEDIA_ITEM_TRANSITION / 退后台时写库，这里直接按活动队列的 cursor 复位；
+     * 没有可恢复的内容（首次使用 / 队列被清空）就静默返回 false，界面维持空白播放页。
+     */
+    suspend fun restoreLastIfAny(): Boolean {
+        val qid = queueRepo.activeQueueIdOnce() ?: return false
+        if (queueRepo.queue(qid) == null) return false
+        if (queueRepo.songs(qid).isEmpty()) return false
+        activate(qid, autoPlay = false)
+        return true
+    }
 
     private fun SongEntity.toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id.toString())

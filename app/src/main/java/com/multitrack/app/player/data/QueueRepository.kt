@@ -21,6 +21,9 @@ class QueueRepository(
         const val T_ARTIST = "artist"
         const val T_PLAYLIST = "playlist"
         const val T_MANUAL = "manual"
+
+        /** 「用 CyrilMusic 打开」生成的队列：固定一条，反复复用 */
+        const val T_EXTERNAL = "external"
     }
 
     private val q = db.queueDao()
@@ -150,6 +153,36 @@ class QueueRepository(
         q.activate(queueId, System.currentTimeMillis())
         q.deactivateOthers(queueId)
         q.queue(queueId)
+    }
+
+    /**
+     * 「用 CyrilMusic 播放」的落点：复用固定的那条外部打开队列，内容换成这次打开的歌。
+     * 不新建队列（不占 20 条额度），也不动用户自己的队列。
+     */
+    suspend fun replaceExternal(songIds: List<Long>): Long? {
+        if (songIds.isEmpty()) return null
+        val existing = q.queuesOnce().firstOrNull { it.sourceType == T_EXTERNAL }
+        if (existing == null) {
+            // 外部打开队列不受 20 条上限约束：用户队列满了也不能挡住「用 CyrilMusic 打开」
+            return db.withTransaction {
+                val id = q.insertQueue(QueueEntity(name = "外部打开", sourceType = T_EXTERNAL, sourceId = 0))
+                q.insertItems(songIds.mapIndexed { i, s -> QueueItemEntity(queueId = id, songId = s, order = i) })
+                id
+            }
+        }
+        db.withTransaction {
+            q.clearItems(existing.id)
+            q.insertItems(songIds.mapIndexed { i, s -> QueueItemEntity(queueId = existing.id, songId = s, order = i) })
+            q.saveCursor(existing.id, 0, 0, System.currentTimeMillis())
+            q.updateQueue(
+                existing.copy(
+                    cursorIndex = 0,
+                    cursorPositionMs = 0,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+        return existing.id
     }
 
     suspend fun saveCursor(queueId: Long, index: Int, posMs: Long) {

@@ -1,9 +1,14 @@
 package com.multitrack.app.player.data
 
 import android.content.Context
+import android.database.Cursor
+import android.media.MediaScannerConnection
+import android.net.Uri
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /**
@@ -33,7 +38,10 @@ class MediaScanner(
             seenIds.add(s.id)
             val old = existing[s.path]
             if (old != null && old.sizeBytes == s.sizeBytes && old.mtime == s.mtime) continue
-            toWrite.add(s)
+            // 已知文件内容变了（用户改了标签 / 用别的工具换过文件）：MediaStore 的列
+            // 滞后于文件本体，直接拿列覆写曲库会把刚改的标签「复原」——
+            // 所以这里回读文件里的真实标签入库（首次扫描 old==null 不解析，保持快）。
+            toWrite.add(if (old != null) mergeFileTags(s) else s)
         }
         val missing = existing.values.filter { it.id !in seenIds }.map { it.id }
 
@@ -49,70 +57,143 @@ class MediaScanner(
         found.size
     }
 
-    private fun queryMediaStore(opts: ScanSettingsStore.Options): List<SongEntity> {
-        val cols = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.DATE_MODIFIED,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.TRACK,
-            MediaStore.Audio.Media.YEAR
+    /** 内容变了的已知文件：以文件本体的标签为准覆写（解析失败则退回 MediaStore 列） */
+    private fun mergeFileTags(s: SongEntity): SongEntity {
+        val t = FileTags.read(s.path) ?: return s
+        return s.copy(
+            title = titleOf(t.title, s.path),
+            artist = clean(t.artist, UNKNOWN),
+            album = clean(t.album, UNKNOWN),
+            albumArtist = t.albumArtist ?: "",
+            composer = t.composer ?: "",
+            genre = t.genre ?: "",
+            year = t.year ?: s.year,
+            track = t.track ?: s.track,
+            disc = t.disc ?: s.disc
         )
+    }
+
+    private fun queryMediaStore(opts: ScanSettingsStore.Options): List<SongEntity> {
         val out = ArrayList<SongEntity>(1024)
         val seenPath = HashSet<String>(2048)
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            cols,
+            COLS,
             "${MediaStore.Audio.Media.IS_MUSIC} != 0",
             null,
             null
         )?.use { c ->
-            val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val iData = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val iTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val iArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val iAlbum = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-            val iDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val iSize = c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
-            val iMtime = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
-            val iAdded = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
-            val iTrack = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
-            val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
             while (c.moveToNext()) {
-                val path = c.getString(iData) ?: continue
-                val dur = c.getLong(iDur)
-                if (dur < opts.minDurationSec * 1000L) continue
-                if (!ScanFilter.includePath(path, opts.scanRoots, opts.excludeDirs)) continue
-                if (!seenPath.add(path)) continue
-                val id = c.getLong(iId)
-                val dir = path.substringBeforeLast('/', "")
-                out.add(
-                    SongEntity(
-                        id = id,
-                        uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.buildUpon()
-                            .appendPath(id.toString()).build().toString(),
-                        path = path,
-                        folderId = folderIdOf(dir),
-                        title = titleOf(c.getString(iTitle), path),
-                        artist = clean(c.getString(iArtist), UNKNOWN),
-                        album = clean(c.getString(iAlbum), UNKNOWN),
-                        durationMs = dur,
-                        sizeBytes = c.getLong(iSize),
-                        mtime = c.getLong(iMtime),
-                        track = c.getInt(iTrack),
-                        year = c.getInt(iYear),
-                        dateAdded = c.getLong(iAdded) * 1000L
-                    )
-                )
+                val s = songFrom(c) ?: continue
+                if (s.durationMs < opts.minDurationSec * 1000L) continue
+                if (!ScanFilter.includePath(s.path, opts.scanRoots, opts.excludeDirs)) continue
+                if (!seenPath.add(s.path)) continue
+                out.add(s)
             }
         }
         return out
     }
+
+    // ── 外部打开：「用 CyrilMusic 打开」进来的单个文件 ──────────────────────
+
+    /**
+     * 把外部传入的单个 uri 变成曲库里的一行，返回可播放的 SongEntity（识别不了返回 null）。
+     * 支持 MediaStore 的 content://media/...、SAF 的 .../document/audio%3A123、file://。
+     * 文件还不在系统媒体库里（刚下载完）就先请求系统扫描，再查一次。
+     */
+    suspend fun importUri(uri: Uri): SongEntity? = withContext(Dispatchers.IO) {
+        findSong(uri)?.let { return@withContext persistOne(it) }
+        // 不在库里：让系统先扫这个文件，再查一次。最多等 2 秒，别把界面拖死
+        pathOf(uri)?.let { path ->
+            runCatching {
+                val latch = CountDownLatch(1)
+                MediaScannerConnection.scanFile(context, arrayOf(path), null) { _, _ -> latch.countDown() }
+                latch.await(2, TimeUnit.SECONDS)
+                Unit
+            }
+        }
+        findSong(uri)?.let { persistOne(it) }
+    }
+
+    private suspend fun persistOne(song: SongEntity): SongEntity {
+        // 曲库里已经有这一行（同一条 MediaStore 记录）：直接返回，不要拿 MediaStore 的列
+        // 再写一遍 —— 那些列里没有流派/专辑艺术家/碟号，REPLACE 会把用户改好的标签抹平。
+        runCatching { songDao.byId(song.id) }.getOrNull()?.let { existing ->
+            if (existing.path == song.path) return existing
+        }
+        runCatching { songDao.upsert(listOf(song)) }
+        runCatching { folderDao.upsert(buildFolders(listOf(song))) }
+        return song
+    }
+
+    private fun findSong(uri: Uri): SongEntity? {
+        val id = idFromUri(uri)
+        val path = pathOf(uri)
+        val (sel, args) = when {
+            id != null -> "${MediaStore.Audio.Media._ID} = ?" to arrayOf(id.toString())
+            path != null -> "${MediaStore.Audio.Media.DATA} = ?" to arrayOf(path)
+            else -> return null
+        }
+        return runCatching {
+            context.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, COLS, sel, args, null)
+                ?.use { c -> if (c.moveToFirst()) songFrom(c) else null }
+        }.getOrNull()
+    }
+
+    /** content://media/.../media/123、SAF 的 .../document/audio%3A123 都能取出 id */
+    private fun idFromUri(uri: Uri): Long? =
+        uri.lastPathSegment?.substringAfterLast(':')?.toLongOrNull()
+
+    private fun pathOf(uri: Uri): String? {
+        if (uri.scheme == "file") return uri.path
+        val id = idFromUri(uri) ?: return null
+        return runCatching {
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Audio.Media.DATA),
+                "${MediaStore.Audio.Media._ID} = ?",
+                arrayOf(id.toString()),
+                null
+            )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()
+    }
+
+    /** 一行 MediaStore 记录 → SongEntity（列表扫描与外部打开共用） */
+    private fun songFrom(c: Cursor): SongEntity? {
+        val path = c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)) ?: return null
+        val id = c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID))
+        val dir = path.substringBeforeLast('/', "")
+        return SongEntity(
+            id = id,
+            uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.buildUpon()
+                .appendPath(id.toString()).build().toString(),
+            path = path,
+            folderId = folderIdOf(dir),
+            title = titleOf(c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)), path),
+            artist = clean(c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)), UNKNOWN),
+            album = clean(c.getString(c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)), UNKNOWN),
+            durationMs = c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)),
+            sizeBytes = c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)),
+            mtime = c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)),
+            track = c.getInt(c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)),
+            year = c.getInt(c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)),
+            dateAdded = c.getLong(c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)) * 1000L
+        )
+    }
+
+    private val COLS = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.DATA,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.DURATION,
+        MediaStore.Audio.Media.SIZE,
+        MediaStore.Audio.Media.DATE_MODIFIED,
+        MediaStore.Audio.Media.DATE_ADDED,
+        MediaStore.Audio.Media.TRACK,
+        MediaStore.Audio.Media.YEAR
+    )
 
     /**
      * 目录树：不仅建「直接放歌」的目录，也把它的所有祖先补上，

@@ -1,5 +1,6 @@
 package com.multitrack.app.player.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -56,6 +57,12 @@ fun ScanSettingsScreen(container: AppContainer, onBack: () -> Unit) {
     var advancedOpen by remember { mutableStateOf(false) }
     val scan by container.scan.collectAsState()
     val scope = rememberCoroutineScope()
+
+    // 系统返回键逐级回退：二级页 → 设置主页 → 资料库，而不是一路退出应用。
+    // （对话框打开时返回键由 AlertDialog 自己消费，到不了这里）
+    BackHandler {
+        if (page != ScanPage.MAIN) page = ScanPage.MAIN else onBack()
+    }
 
     fun applyAndRescan(o: ScanSettingsStore.Options) {
         opts = o
@@ -118,7 +125,9 @@ fun ScanSettingsScreen(container: AppContainer, onBack: () -> Unit) {
                 SectionLabel("信息")
                 SettingsRow("支持的文件类型", "mp3 / flac / wav / ogg / m4a …") { typesOpen = true }
                 SettingsRow("存储设备", "") { storageOpen = true }
-                Spacer(Modifier.height(24.dp))
+                // 底部导航浮在内容上（80dp + 手势条）：最后一行要完整滚出来，
+                // 竖屏横屏都要留够，否则「存储设备」永远压在导航栏底下
+                Spacer(Modifier.height(110.dp))
             }
 
             ScanPage.ROOTS -> FolderListPage(
@@ -184,10 +193,14 @@ private fun FolderListPage(
     var addOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
         Text(hint, color = PColors.TextWeak, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(vertical = 10.dp))
-        if (current.isEmpty()) {
-            Text(emptyHint, color = PColors.TextDim, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
-        }
-        LazyColumn(Modifier.weight(1f)) {
+        LazyColumn(
+            Modifier.weight(1f),
+            // 底部导航浮在内容上：留出它的高度，列表滚到底也不被挡
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp)
+        ) {
+            if (current.isEmpty()) {
+                item { Text(emptyHint, color = PColors.TextDim, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+            }
             items(current.sorted()) { dir ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -199,17 +212,20 @@ private fun FolderListPage(
                     }
                 }
             }
-        }
-        // 底部固定一条「+ 添加文件夹」，与参考截图一致
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { addOpen = true }
-                .padding(vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = PColors.Text)
-            Text("添加文件夹", color = PColors.Text, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp))
+            // 「+ 添加文件夹」紧跟在列表内容下方，不再固定在屏幕底部
+            // （底部导航是浮层，固定底部的按钮会被它盖住）
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { addOpen = true }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = null, tint = PColors.Text)
+                    Text("添加文件夹", color = PColors.Text, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp))
+                }
+            }
         }
     }
     if (addOpen) AddFolderDialog(container, existing = current, onDismiss = { addOpen = false }) { dir ->

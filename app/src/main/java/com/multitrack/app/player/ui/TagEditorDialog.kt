@@ -3,12 +3,14 @@ package com.multitrack.app.player.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -110,11 +112,14 @@ fun TagEditorDialog(
             var ok = 0
             var fail = 0
             var lastError: String? = null
+            // 部分成功的说明（如封面无法内嵌）：标签写成功了，只是要告诉用户封面走了哪条路
+            var lastNote: String? = null
             songs.forEachIndexed { i, song ->
                 progress = "写入 ${i + 1}/${songs.size}"
                 val r = container.tagWriter.write(song, edits)
                 if (r.isSuccess) {
                     ok++
+                    r.getOrNull()?.let { lastNote = it }
                     runCatching {
                         container.songDao().updateTags(
                             song.id,
@@ -127,7 +132,8 @@ fun TagEditorDialog(
                             edits.track ?: song.track,
                             edits.disc ?: song.disc
                         )
-                        // 文件确实写成功之后，本地缩略图也换成新的（列表立刻刷新）
+                        // 文件确实写成功之后，本地缩略图也换成新的（列表立刻刷新）。
+                        // 封面没内嵌进文件时这里同样生效 —— 应用内封面本来就更优先显示。
                         edits.cover?.let { container.art.setCustomCover(song.id, it) }
                         container.art.invalidate(song.id)
                         container.lyrics.invalidate(song.id)
@@ -138,8 +144,11 @@ fun TagEditorDialog(
                 }
             }
             busy = false
-            if (fail == 0) onDismiss()
-            else message = "写入失败 $fail 首" + (lastError?.let { "：$it" } ?: "（该格式或该存储位置不允许改写）")
+            when {
+                fail > 0 -> message = "写入失败 $fail 首" + (lastError?.let { "：$it" } ?: "（该格式或该存储位置不允许改写）")
+                lastNote != null -> message = "已写入 $ok 首：$lastNote"
+                else -> onDismiss()
+            }
         }
     }
 
@@ -148,6 +157,14 @@ fun TagEditorDialog(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) persist()
         else message = "没有获得这些文件的写权限，标签未修改"
+    }
+
+    // Android 9 及以下：写文件要 WRITE_EXTERNAL_STORAGE 运行时授权，没授权就明说，不裸跑
+    val writePerm = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) persist()
+        else message = "没有存储写权限，标签未修改"
     }
 
     fun save() {
@@ -163,7 +180,12 @@ fun TagEditorDialog(
                 writeAuth.launch(IntentSenderRequest.Builder(pi.intentSender).build())
             }.onFailure { message = "无法申请写权限：${it.message}" }
         } else {
-            persist()
+            val perm = android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED) {
+                persist()
+            } else {
+                writePerm.launch(perm)
+            }
         }
     }
 

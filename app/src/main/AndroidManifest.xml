@@ -39,11 +39,66 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.CyrilMusic"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- 文件管理器「打开方式」→ 播放。和下面的「编辑标签」成一对，
+                 两个条目的名字取自各自的 android:label。 -->
+            <intent-filter android:label="CyrilMusic 播放">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="audio/*" />
+                <data android:scheme="file" android:mimeType="audio/*" />
+                <data android:scheme="content" android:mimeType="application/ogg" />
+                <data android:scheme="file" android:mimeType="application/ogg" />
+            </intent-filter>
+            <!-- 有些文件管理器发的是不带 MIME 的 file:// → 按扩展名兜一层 -->
+            <intent-filter android:label="CyrilMusic 播放">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.mp3" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.flac" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.wav" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.m4a" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.ogg" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.opus" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.aac" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.ape" />
+            </intent-filter>
+        </activity>
+
+        <!-- 打开方式 → 编辑标签 -->
+        <activity
+            android:name=".TagEditActivity"
+            android:exported="true"
+            android:label="CyrilMusic 编辑标签"
+            android:theme="@style/Theme.CyrilMusic"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter android:label="CyrilMusic 编辑标签">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="audio/*" />
+                <data android:scheme="file" android:mimeType="audio/*" />
+                <data android:scheme="content" android:mimeType="application/ogg" />
+                <data android:scheme="file" android:mimeType="application/ogg" />
+            </intent-filter>
+            <intent-filter android:label="CyrilMusic 编辑标签">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.mp3" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.flac" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.wav" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.m4a" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.ogg" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.opus" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.aac" />
+                <data android:scheme="file" android:host="*" android:pathPattern=".*\\.ape" />
             </intent-filter>
         </activity>
 

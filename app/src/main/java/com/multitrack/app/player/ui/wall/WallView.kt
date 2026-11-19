@@ -19,6 +19,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -706,17 +709,14 @@ private fun ExpandedPoster(
     }
 }
 
-/** 一行歌词占的高度（dp）。固定值才能让「整块滑一行」严丝合缝 */
-private const val LYRIC_STEP = 58f
-
 /**
  * 展开卡中间的歌词。
  *
- * 照上游 Lattice 的「轨道」模型重做：
- * - 固定 5 个槽位（当前 ±2），换段时整块先往下偏一行蛋再弹回原位，
- *   读起来就是歌词「往上推一行」，而不是文字直接跳变；
- * - 每一行按离当前段的远近给 alpha / 缩放 / 模糊（远处虚、近处实），切换时三者一起补间；
- * - 当前行做逐字填充（卡拉 OK 式），填充进度按本段到下一段的时间轴算。
+ * 与正在播放页的 LyricsPanel 同一套逻辑：整份歌词排进 LazyColumn，
+ * 当前行变了就把目标行滚到视口上部（远距离直接跳、近距离做滚动动画），
+ * 当前行高亮、其余行淡化，双语歌词整段一起亮。
+ * 旧版「固定 5 槽轨道」在换句时整块先 snap 再弹回、槽内文字又各自滑一遍，
+ * 两层动画叠起来，每次换句都会「晃一下」——已废弃。
  */
 @Composable
 private fun WallLyrics(
@@ -757,217 +757,61 @@ internal fun WallLyricsBody(
 ) {
     if (stanzas.isEmpty()) return
     val timed = stanzas.first().atMs >= 0
-    val index = if (!timed) -1 else stanzaIndex(stanzas, positionMs)
+    val current = if (!timed) -1 else stanzaIndex(stanzas, positionMs)
 
-    // 整块歌词的滑动：换段时从「上一段的位置」弹回原位
-    val slide = remember { Animatable(0f) }
-    var lastIndex by remember(stanzas) { mutableStateOf(index) }
-    LaunchedEffect(index, stanzas) {
-        val prev = lastIndex
-        lastIndex = index
-        if (prev == index || prev < 0 || index < 0) return@LaunchedEffect
-        slide.snapTo((index - prev).coerceIn(-2, 2) * LYRIC_STEP)
-        slide.animateTo(
-            0f,
-            tween(430, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))
-        )
-    }
-
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset { IntOffset(0, slide.value.dp.roundToPx()) },
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // 槽位固定 5 个：越界的位置也占住高度，这样进出时整块不会「抖一下」
-            for (d in -2..2) {
-                key(d) {
-                    val i = if (timed) index + d else d
-                    val stanza = stanzas.getOrNull(i)
-                    val active = timed && d == 0
-                    LyricSlot(
-                        text = stanza?.lines?.firstOrNull().orEmpty(),
-                        sub = stanza?.lines?.getOrNull(1),
-                        distance = if (timed) d else 3,
-                        active = active,
-                        fill = if (active) lyricFill(stanzas, i, positionMs) else 0f
-                    )
-                }
-            }
+    // 与正在播放页 LyricsPanel 一致：当前行变化时把目标行滚到视口上部第 3 行处。
+    // 远距离（拖进度条/切歌）直接跳到位，近距离才做动画——
+    // 一律做动画的话一句还没滚到位下一句就来了，看着就是歌词追不上。
+    val listState = rememberLazyListState()
+    LaunchedEffect(current, stanzas) {
+        if (current < 0) return@LaunchedEffect
+        val target = (current - 2).coerceAtLeast(0)
+        val first = listState.firstVisibleItemIndex
+        runCatching {
+            if (abs(target - first) > 2) listState.scrollToItem(target)
+            else listState.animateScrollToItem(target)
         }
     }
-}
-
-/**
- * 单个歌词槽位：远处虚、近处实，换字时做交叉淡入淡出。
- * 缩放和模糊都走 graphicsLayer，不参与布局 —— 否则一行放大就会把上下行顶开，
- * 整块会跟着一跳一跳。
- */
-@Composable
-private fun LyricSlot(
-    text: String,
-    sub: String?,
-    distance: Int,
-    active: Boolean,
-    fill: Float
-) {
-    val toneAlpha = when {
-        active -> 1f
-        kotlin.math.abs(distance) == 1 -> 0.52f
-        kotlin.math.abs(distance) == 2 -> 0.26f
-        else -> 0.15f
-    }
-    val toneScale = when {
-        active -> 1f
-        kotlin.math.abs(distance) == 1 -> 0.88f
-        else -> 0.76f
-    }
-    val toneBlur = when {
-        active -> 0f
-        kotlin.math.abs(distance) == 1 -> 1.1f
-        kotlin.math.abs(distance) == 2 -> 2.4f
-        else -> 3.2f
-    }
-    val alpha by animateFloatAsState(
-        toneAlpha, tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)), label = "lyA"
-    )
-    val scale by animateFloatAsState(
-        toneScale, spring(dampingRatio = 1f, stiffness = 190f), label = "lyS"
-    )
-    val blurR by animateFloatAsState(toneBlur, tween(340), label = "lyB")
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(LYRIC_STEP.dp)
-            .graphicsLayer {
-                this.alpha = alpha
-                scaleX = scale
-                scaleY = scale
-            }
-            .blur(blurR.dp)
-            .clipToBounds(),
-        contentAlignment = Alignment.Center
+    LazyColumn(
+        state = listState,
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (text.isEmpty()) return@Box
-        // 换行时旧字往上飘出、新字从下方顶上来 —— 原版是 Pixi 的轨道推进，
-        // 单纯淡入淡出看起来像「文字原地闪了一下」，这是「不像原版」的主要观感差。
-        AnimatedContent(
-            targetState = text to sub,
-            transitionSpec = {
-                (fadeIn(tween(300, delayMillis = 70)) +
-                    slideInVertically(
-                        tween(360, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f))
-                    ) { it * 3 / 5 })
-                    .togetherWith(
-                        fadeOut(tween(200)) + slideOutVertically(tween(320)) { -it * 3 / 5 }
-                    )
-            },
-            label = "lyX"
-        ) { pair ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (active) {
-                    KaraokeText(pair.first, fill)
-                } else {
+        itemsIndexed(stanzas) { idx, stanza ->
+            val active = idx == current
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 10.dp)
+            ) {
+                Text(
+                    stanza.lines.first(),
+                    color = when {
+                        !timed -> Color.White.copy(alpha = 0.62f)
+                        active -> Color.White
+                        else -> Color.White.copy(alpha = 0.45f)
+                    },
+                    fontSize = if (active) 17.sp else 14.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // 译文/音译：跟着原文一起亮，但字号更小、力度更轻，不抢主行
+                for (sub in stanza.lines.drop(1)) {
                     Text(
-                        pair.first,
-                        color = Color.White,
-                        fontSize = if (distance == 1) 18.sp else 15.sp,
+                        sub,
+                        color = when {
+                            !timed -> Color.White.copy(alpha = 0.50f)
+                            active -> Color.White.copy(alpha = 0.78f)
+                            else -> Color.White.copy(alpha = 0.36f)
+                        },
+                        fontSize = if (active) 13.sp else 11.5.sp,
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        lineHeight = 24.sp,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp)
-                    )
-                }
-                pair.second?.let {
-                    Text(
-                        it,
-                        color = Color.White.copy(alpha = 0.58f),
-                        fontSize = 11.5.sp,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 3.dp)
                     )
                 }
             }
         }
     }
-}
-
-/** 当前行：底稿半透明，逐字填充的那层用白色盖上去（卡拉 OK 效果），并带一点辉光 */
-@Composable
-private fun KaraokeText(text: String, progress: Float) {
-    val p = progress.coerceIn(0f, 1f)
-    val shadow = androidx.compose.ui.graphics.Shadow(
-        color = PColors.Accent.copy(alpha = 0.45f), blurRadius = 16f
-    )
-    val base = androidx.compose.ui.text.TextStyle(
-        fontSize = 24.sp,
-        lineHeight = 30.sp,
-        fontWeight = FontWeight.SemiBold,
-        textAlign = TextAlign.Center
-    )
-    // 逐字填充要按「这一行字自己的宽度」算，不能拿整块宽度算 ——
-    // 一行字只占卡片中间一小段，用整块宽度算的话半句就「点亮完了」，看着像没填充。
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-        val maxPx = constraints.maxWidth
-        val textW = remember(text, maxPx) {
-            runCatching {
-                measurer.measure(
-                    androidx.compose.ui.text.AnnotatedString(text),
-                    base,
-                    maxLines = 2,
-                    constraints = androidx.compose.ui.unit.Constraints(maxWidth = maxPx)
-                ).size.width.toFloat()
-            }.getOrDefault(0f)
-        }
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text(
-                text,
-                color = Color.White.copy(alpha = 0.42f),
-                style = base,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-            )
-            Text(
-                text,
-                color = Color.White,
-                style = base.copy(shadow = shadow),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
-                    .drawWithContent {
-                        if (p <= 0f) return@drawWithContent
-                        if (p >= 1f) {
-                            drawContent()
-                            return@drawWithContent
-                        }
-                        // 文字是居中的：先算出文字真正的左边缘，再从左往右裁到「唱到」的位置
-                        val w = if (textW > 0f) textW else size.width
-                        val left = ((size.width - w) / 2f).coerceAtLeast(0f)
-                        clipRect(left, 0f, left + w * p, size.height) { this@drawWithContent.drawContent() }
-                    }
-            )
-        }
-    }
-}
-
-/** 当前段已经唱了多久（0~1）：以本段与下一段的时间戳为区间 */
-internal fun lyricFill(stanzas: List<LyricsRepository.Stanza>, index: Int, positionMs: Long): Float {
-    if (index !in stanzas.indices) return 0f
-    val start = stanzas[index].atMs
-    if (start < 0) return 0f
-    val end = stanzas.getOrNull(index + 1)?.atMs ?: (start + 4_000L)
-    val span = (end - start).coerceAtLeast(400L)
-    return ((positionMs - start).toFloat() / span).coerceIn(0f, 1f)
 }
 
 /** 展开卡底部：细进度条 + 上一首/播放/下一首 + 打开播放页 */

@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,12 +67,18 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.multitrack.app.player.AppContainer
 import com.multitrack.app.player.playback.AudioFx
+import com.multitrack.app.player.playback.PlaybackUi
 import com.multitrack.app.player.data.LyricsRepository
 import com.multitrack.app.player.data.SongEntity
 import java.io.File
 
 /**
  * 正在播放页（对标截图 2）：大封面 + 虚化背景 + 三行曲目信息 + 进度条 + 传输行。
+ *
+ * **横屏专属布局**：横屏时屏幕高度只有 200~300dp，竖排（封面 300dp + 信息 + 控件）
+ * 根本放不下，底部传输键会被浮在内容之上的底部导航栏整个盖住 ——
+ * 所以横屏切成左右双栏：左栏封面 + 曲目信息（封面尺寸按剩余高度自适应），
+ * 右栏工具行 + 进度条 + 传输键；整块内容垫高 88dp 避开导航栏浮层。
  */
 @Composable
 fun NowPlayingScreen(container: AppContainer, onOpenQueue: () -> Unit, onEditTags: (List<SongEntity>) -> Unit = {}) {
@@ -87,7 +94,6 @@ fun NowPlayingScreen(container: AppContainer, onOpenQueue: () -> Unit, onEditTag
     var lyricsMode by remember { mutableStateOf(false) }
     // 「加入歌单」浮层：左下角原来的收藏/点赞（点了没有任何作用）换成了这个
     var addToOpen by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var fxOpen by remember { mutableStateOf(false) }
     var extremeAsk by remember { mutableStateOf(false) }
     // 倍速 / 定时关闭：都是「滑块 + 按钮」，不再给预设档位
@@ -97,10 +103,8 @@ fun NowPlayingScreen(container: AppContainer, onOpenQueue: () -> Unit, onEditTag
         value = song?.let { container.lyrics.lines(it) } ?: emptyList()
     }
 
-    var scrubbing by remember { mutableStateOf(false) }
-    var scrubValue by remember { mutableStateOf(0f) }
-    val duration = playback.durationMs.coerceAtLeast(1)
-    val progress = if (scrubbing) scrubValue else playback.positionMs.toFloat() / duration
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     Box(modifier = Modifier.fillMaxSize().background(PColors.Bg)) {
         if (cover != null) {
@@ -114,275 +118,126 @@ fun NowPlayingScreen(container: AppContainer, onOpenQueue: () -> Unit, onEditTag
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.08f)))
         }
 
-        Column(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp),
-            // 整块内容在竖直方向居中偏下：上面空出大片，下面贴着导航栏
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(Modifier.height(8.dp))
-            if (lyricsMode) {
-                LyricsPanel(
-                    lines = lyrics,
-                    positionMs = playback.positionMs,
-                    hint = song?.let { s ->
-                        val f = java.io.File(s.path)
-                        "暂无歌词\n把 ${f.nameWithoutExtension}.lrc 放进\n${f.parent ?: "歌曲所在目录"}"
-                    } ?: "暂无歌词",
-                    modifier = Modifier.fillMaxWidth().height(300.dp)
-                )
-            } else {
-                // 双击封面直接看歌词（原版 Musicolet 也是这个操作）
-                Box(
-                    modifier = Modifier.pointerInput(song?.id) {
-                        detectTapGestures(onDoubleTap = { lyricsMode = true })
+        if (landscape) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    // 底部导航是浮在内容上的（默认高 80dp + 手势条）：垫高避开它
+                    .padding(horizontal = 24.dp).padding(bottom = 88.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 左栏：封面（高度不够时自动缩小）+ 曲目信息；双击封面看歌词
+                BoxWithConstraints(Modifier.weight(1.1f)) {
+                    val infoBlock = 110.dp   // 标题/艺人/专辑/错误提示的预留高度
+                    val coverSize = (maxHeight - infoBlock).coerceIn(110.dp, 220.dp)
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (lyricsMode) {
+                            LyricsPanel(
+                                lines = lyrics,
+                                positionMs = playback.positionMs,
+                                hint = song?.let { s ->
+                                    val f = java.io.File(s.path)
+                                    "暂无歌词\n把 ${f.nameWithoutExtension}.lrc 放进\n${f.parent ?: "歌曲所在目录"}"
+                                } ?: "暂无歌词",
+                                modifier = Modifier.fillMaxWidth().height((coverSize + 20.dp).coerceAtMost(280.dp))
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.pointerInput(song?.id) {
+                                    detectTapGestures(onDoubleTap = { lyricsMode = true })
+                                }
+                            ) {
+                                CoverArt(file = cover, size = coverSize, corner = 6.dp)
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        SongInfoBlock(song = song, error = playback.error)
                     }
+                }
+
+                // 右栏：工具行 + 进度条 + 传输键，垂直居中
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    CoverArt(file = cover, size = 300.dp, corner = 6.dp)
-                }
-            }
-            Spacer(Modifier.height(26.dp))
-
-            Text(
-                text = song?.title ?: "未在播放",
-                color = PColors.Text,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 2
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(song?.artist ?: "", color = PColors.TextDim, fontSize = 13.sp, textAlign = TextAlign.Center)
-            Text(song?.album ?: "", color = PColors.TextWeak, fontSize = 12.sp, textAlign = TextAlign.Center)
-
-            // 播放器报错时把错误码摆出来：不然「放不了」在界面上完全不可见
-            playback.error?.let { msg ->
-                Text(
-                    msg,
-                    color = Color(0xFFFF6B6B),
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp, start = 12.dp, end = 12.dp)
-                )
-            }
-
-            Spacer(Modifier.height(14.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row {
-                    IconButton(onClick = { lyricsMode = !lyricsMode }) {
-                        Icon(
-                            Icons.Rounded.TextSnippet, null,
-                            tint = if (lyricsMode) PColors.Accent else PColors.Text
-                        )
-                    }
-                    IconButton(onClick = { if (song != null) addToOpen = true }) {
-                        Icon(Icons.Rounded.PlaylistAdd, contentDescription = "加入歌单", tint = PColors.Text)
-                    }
-                    IconButton(onClick = { song?.let { onEditTags(listOf(it)) } }) { Icon(Icons.Rounded.Info, null, tint = PColors.Text) }
-                    IconButton(onClick = onOpenQueue) { Icon(Icons.Rounded.QueueMusic, contentDescription = "播放队列", tint = PColors.Text) }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { container.playback.cycleRepeat() }) {
-                        Icon(
-                            if (playback.repeatMode == 1) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                            contentDescription = null,
-                            tint = if (playback.repeatMode != 0) PColors.Accent else PColors.TextDim
-                        )
-                    }
-                    IconButton(onClick = { container.playback.toggleShuffle() }) {
-                        Icon(
-                            Icons.Rounded.Shuffle, null,
-                            tint = if (playback.shuffle) PColors.Accent else PColors.TextDim
-                        )
-                    }
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Rounded.MoreVert, null, tint = PColors.TextDim)
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("均衡器 / 音效", fontSize = 13.sp, color = PColors.Text) },
-                                onClick = { menuOpen = false; fxOpen = true }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (AudioFx.extremeMode) "关闭极限外放" else "极限外放（音量拉满 / +9dB / 限幅）",
-                                        fontSize = 13.sp,
-                                        color = if (AudioFx.extremeMode) PColors.Accent else PColors.Text
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    if (AudioFx.extremeMode) AudioFx.setExtreme(false) else extremeAsk = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    val on = container.playback.isAutoGainOn()
-                                    Text(
-                                        if (on) "音量自动补偿：已开启" else "音量自动补偿：已关闭",
-                                        fontSize = 13.sp,
-                                        color = if (on) PColors.TextDim else PColors.Accent
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    container.playback.setAutoGain(!container.playback.isAutoGainOn())
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (com.multitrack.app.player.BatteryOpt.isIgnoring(context))
-                                            "后台播放：已忽略省电限制"
-                                        else "后台播放：允许忽略省电限制",
-                                        fontSize = 13.sp,
-                                        color = if (com.multitrack.app.player.BatteryOpt.isIgnoring(context))
-                                            PColors.TextDim else PColors.Accent
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    com.multitrack.app.player.BatteryOpt.request(context)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    // 三种状态分开说：没授权 / 被系统关掉 / 权限都有但通知没挂上
-                                    val granted = com.multitrack.app.player.NotificationCheck.runtimeGranted(context)
-                                    val on = com.multitrack.app.player.NotificationCheck.enabled(context)
-                                    val shown = on && com.multitrack.app.player.NotificationCheck.mediaShown(context)
-                                    Text(
-                                        when {
-                                            !granted -> "通知栏播放器：未授权通知（点此开启）"
-                                            !on -> "通知栏播放器：被系统关闭（点此开启）"
-                                            shown -> "通知栏播放器：已显示 · 点此重发"
-                                            else -> "通知栏播放器：未显示 · 点此重发"
-                                        },
-                                        fontSize = 13.sp,
-                                        color = if (shown) PColors.TextDim else PColors.Accent
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    if (com.multitrack.app.player.NotificationCheck.enabled(context)) {
-                                        container.playback.repostNotification()
-                                    } else {
-                                        com.multitrack.app.player.NotificationCheck.openSettings(context)
-                                    }
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("编辑标签 / 封面", fontSize = 13.sp, color = PColors.Text) },
-                                onClick = {
-                                    menuOpen = false
-                                    song?.let { onEditTags(listOf(it)) }
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "播放速度  " + String.format(java.util.Locale.US, "%.2f×", playback.speed),
-                                        fontSize = 13.sp,
-                                        color = if (kotlin.math.abs(playback.speed - 1f) > 0.01f) PColors.Accent else PColors.Text
-                                    )
-                                },
-                                onClick = { menuOpen = false; speedOpen = true }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        when {
-                                            playback.abStartMs < 0 -> "A-B：在此设 A 点"
-                                            playback.abEndMs < 0 -> "A-B：在此设 B 点（A=${formatTime(playback.abStartMs)}）"
-                                            else -> "A-B：清除（${formatTime(playback.abStartMs)}–${formatTime(playback.abEndMs)}）"
-                                        },
-                                        fontSize = 13.sp, color = PColors.Text
-                                    )
-                                },
-                                onClick = {
-                                    if (playback.abEndMs < 0) container.playback.markB()
-                                    else if (playback.abStartMs < 0) container.playback.markA()
-                                    else container.playback.clearAb()
-                                    menuOpen = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text("A-B：重设 A 点（当前位置）", fontSize = 13.sp, color = PColors.TextDim)
-                                },
-                                onClick = { container.playback.markA(); menuOpen = false }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (playback.sleepAtMs > 0L)
-                                            "定时关闭  剩 ${container.playback.remainingSleepMinutes()} 分"
-                                        else "定时关闭",
-                                        fontSize = 13.sp,
-                                        color = if (playback.sleepAtMs > 0L) PColors.Accent else PColors.Text
-                                    )
-                                },
-                                onClick = { menuOpen = false; sleepOpen = true }
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(formatTime(if (scrubbing) (scrubValue * duration).toLong() else playback.positionMs),
-                    color = PColors.TextDim, fontSize = 12.sp, modifier = Modifier.width(52.dp))
-                Slider(
-                    value = progress.coerceIn(0f, 1f),
-                    onValueChange = { scrubbing = true; scrubValue = it },
-                    onValueChangeFinished = {
-                        container.playback.seekTo((scrubValue * duration).toLong())
-                        scrubbing = false
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                Text(formatTime(playback.durationMs), color = PColors.TextDim, fontSize = 12.sp,
-                    textAlign = TextAlign.End, modifier = Modifier.width(52.dp))
-            }
-
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                IconButton(onClick = {}) { Icon(Icons.Rounded.VolumeUp, null, tint = PColors.TextWeak) }
-                IconButton(onClick = { container.playback.prev() }) {
-                    Icon(Icons.Rounded.SkipPrevious, null, tint = PColors.Text, modifier = Modifier.size(30.dp))
-                }
-                IconButton(onClick = { container.playback.seekRelative(-10_000) }) {
-                    Icon(Icons.Rounded.FastRewind, null, tint = PColors.TextWeak)
-                }
-                IconButton(onClick = {
-                    if (!playback.ready) container.playback.connect() else container.playback.toggle()
-                }) {
-                    Icon(
-                        if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = null, tint = PColors.Text, modifier = Modifier.size(44.dp)
+                    UtilityRow(
+                        container = container,
+                        playback = playback,
+                        song = song,
+                        lyricsMode = lyricsMode,
+                        onToggleLyrics = { lyricsMode = !lyricsMode },
+                        onAddToPlaylist = { if (song != null) addToOpen = true },
+                        onEditSong = { song?.let { onEditTags(listOf(it)) } },
+                        onOpenQueue = onOpenQueue,
+                        onOpenFx = { fxOpen = true },
+                        onAskExtreme = { extremeAsk = true },
+                        onOpenSpeed = { speedOpen = true },
+                        onOpenSleep = { sleepOpen = true }
                     )
+                    Spacer(Modifier.height(8.dp))
+                    ProgressRow(container = container, playback = playback)
+                    Spacer(Modifier.height(4.dp))
+                    TransportRow(container = container, playback = playback)
                 }
-                IconButton(onClick = { container.playback.seekRelative(10_000) }) {
-                    Icon(Icons.Rounded.FastForward, null, tint = PColors.TextWeak)
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp),
+                // 整块内容在竖直方向居中偏下：上面空出大片，下面贴着导航栏
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(8.dp))
+                if (lyricsMode) {
+                    LyricsPanel(
+                        lines = lyrics,
+                        positionMs = playback.positionMs,
+                        hint = song?.let { s ->
+                            val f = java.io.File(s.path)
+                            "暂无歌词\n把 ${f.nameWithoutExtension}.lrc 放进\n${f.parent ?: "歌曲所在目录"}"
+                        } ?: "暂无歌词",
+                        modifier = Modifier.fillMaxWidth().height(300.dp)
+                    )
+                } else {
+                    // 双击封面直接看歌词（原版 Musicolet 也是这个操作）
+                    Box(
+                        modifier = Modifier.pointerInput(song?.id) {
+                            detectTapGestures(onDoubleTap = { lyricsMode = true })
+                        }
+                    ) {
+                        CoverArt(file = cover, size = 300.dp, corner = 6.dp)
+                    }
                 }
-                IconButton(onClick = { container.playback.next() }) {
-                    Icon(Icons.Rounded.SkipNext, null, tint = PColors.Text, modifier = Modifier.size(30.dp))
-                }
-                // 多轨编辑器入口统一放在屏幕右上角的同一个按钮上（CyrilRoot 内）
-                Spacer(Modifier.size(44.dp))
+                Spacer(Modifier.height(26.dp))
+
+                SongInfoBlock(song = song, error = playback.error)
+
+                Spacer(Modifier.height(14.dp))
+                UtilityRow(
+                    container = container,
+                    playback = playback,
+                    song = song,
+                    lyricsMode = lyricsMode,
+                    onToggleLyrics = { lyricsMode = !lyricsMode },
+                    onAddToPlaylist = { if (song != null) addToOpen = true },
+                    onEditSong = { song?.let { onEditTags(listOf(it)) } },
+                    onOpenQueue = onOpenQueue,
+                    onOpenFx = { fxOpen = true },
+                    onAskExtreme = { extremeAsk = true },
+                    onOpenSpeed = { speedOpen = true },
+                    onOpenSleep = { sleepOpen = true }
+                )
+
+                Spacer(Modifier.height(6.dp))
+                ProgressRow(container = container, playback = playback)
+
+                Spacer(Modifier.height(6.dp))
+                TransportRow(container = container, playback = playback)
             }
         }
 
@@ -436,6 +291,285 @@ fun NowPlayingScreen(container: AppContainer, onOpenQueue: () -> Unit, onEditTag
                 }
             )
         }
+    }
+}
+
+/** 标题 / 艺人 / 专辑 三行 + 播放错误提示。 */
+@Composable
+private fun SongInfoBlock(song: SongEntity?, error: String?) {
+    Text(
+        text = song?.title ?: "未在播放",
+        color = PColors.Text,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
+        maxLines = 2
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(song?.artist ?: "", color = PColors.TextDim, fontSize = 13.sp, textAlign = TextAlign.Center)
+    Text(song?.album ?: "", color = PColors.TextWeak, fontSize = 12.sp, textAlign = TextAlign.Center)
+    // 播放器报错时把错误码摆出来：不然「放不了」在界面上完全不可见
+    error?.let { msg ->
+        Text(
+            msg,
+            color = Color(0xFFFF6B6B),
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 4.dp, start = 12.dp, end = 12.dp)
+        )
+    }
+}
+
+/**
+ * 工具行：左边 歌词 / 加入歌单 / 标签信息 / 队列，右边 循环 / 随机 / 更多菜单。
+ * 竖屏横屏共用同一套；菜单锚在本行右侧的 ⋮ 上。
+ */
+@Composable
+private fun UtilityRow(
+    container: AppContainer,
+    playback: PlaybackUi,
+    song: SongEntity?,
+    lyricsMode: Boolean,
+    onToggleLyrics: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onEditSong: () -> Unit,
+    onOpenQueue: () -> Unit,
+    onOpenFx: () -> Unit,
+    onAskExtreme: () -> Unit,
+    onOpenSpeed: () -> Unit,
+    onOpenSleep: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var menuOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row {
+            IconButton(onClick = onToggleLyrics) {
+                Icon(
+                    Icons.Rounded.TextSnippet, null,
+                    tint = if (lyricsMode) PColors.Accent else PColors.Text
+                )
+            }
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(Icons.Rounded.PlaylistAdd, contentDescription = "加入歌单", tint = PColors.Text)
+            }
+            IconButton(onClick = onEditSong) { Icon(Icons.Rounded.Info, null, tint = PColors.Text) }
+            IconButton(onClick = onOpenQueue) { Icon(Icons.Rounded.QueueMusic, contentDescription = "播放队列", tint = PColors.Text) }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { container.playback.cycleRepeat() }) {
+                Icon(
+                    if (playback.repeatMode == 1) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                    contentDescription = null,
+                    tint = if (playback.repeatMode != 0) PColors.Accent else PColors.TextDim
+                )
+            }
+            IconButton(onClick = { container.playback.toggleShuffle() }) {
+                Icon(
+                    Icons.Rounded.Shuffle, null,
+                    tint = if (playback.shuffle) PColors.Accent else PColors.TextDim
+                )
+            }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Rounded.MoreVert, null, tint = PColors.TextDim)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("均衡器 / 音效", fontSize = 13.sp, color = PColors.Text) },
+                        onClick = { menuOpen = false; onOpenFx() }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (AudioFx.extremeMode) "关闭极限外放" else "极限外放（音量拉满 / +9dB / 限幅）",
+                                fontSize = 13.sp,
+                                color = if (AudioFx.extremeMode) PColors.Accent else PColors.Text
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            if (AudioFx.extremeMode) AudioFx.setExtreme(false) else onAskExtreme()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            val on = container.playback.isAutoGainOn()
+                            Text(
+                                if (on) "音量自动补偿：已开启" else "音量自动补偿：已关闭",
+                                fontSize = 13.sp,
+                                color = if (on) PColors.TextDim else PColors.Accent
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            container.playback.setAutoGain(!container.playback.isAutoGainOn())
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (com.multitrack.app.player.BatteryOpt.isIgnoring(context))
+                                    "后台播放：已忽略省电限制"
+                                else "后台播放：允许忽略省电限制",
+                                fontSize = 13.sp,
+                                color = if (com.multitrack.app.player.BatteryOpt.isIgnoring(context))
+                                    PColors.TextDim else PColors.Accent
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            com.multitrack.app.player.BatteryOpt.request(context)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            // 三种状态分开说：没授权 / 被系统关掉 / 权限都有但通知没挂上
+                            val granted = com.multitrack.app.player.NotificationCheck.runtimeGranted(context)
+                            val on = com.multitrack.app.player.NotificationCheck.enabled(context)
+                            val shown = on && com.multitrack.app.player.NotificationCheck.mediaShown(context)
+                            Text(
+                                when {
+                                    !granted -> "通知栏播放器：未授权通知（点此开启）"
+                                    !on -> "通知栏播放器：被系统关闭（点此开启）"
+                                    shown -> "通知栏播放器：已显示 · 点此重发"
+                                    else -> "通知栏播放器：未显示 · 点此重发"
+                                },
+                                fontSize = 13.sp,
+                                color = if (shown) PColors.TextDim else PColors.Accent
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            if (com.multitrack.app.player.NotificationCheck.enabled(context)) {
+                                container.playback.repostNotification()
+                            } else {
+                                com.multitrack.app.player.NotificationCheck.openSettings(context)
+                            }
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("编辑标签 / 封面", fontSize = 13.sp, color = PColors.Text) },
+                        onClick = {
+                            menuOpen = false
+                            onEditSong()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                "播放速度  " + String.format(java.util.Locale.US, "%.2f×", playback.speed),
+                                fontSize = 13.sp,
+                                color = if (kotlin.math.abs(playback.speed - 1f) > 0.01f) PColors.Accent else PColors.Text
+                            )
+                        },
+                        onClick = { menuOpen = false; onOpenSpeed() }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                when {
+                                    playback.abStartMs < 0 -> "A-B：在此设 A 点"
+                                    playback.abEndMs < 0 -> "A-B：在此设 B 点（A=${formatTime(playback.abStartMs)}）"
+                                    else -> "A-B：清除（${formatTime(playback.abStartMs)}–${formatTime(playback.abEndMs)}）"
+                                }
+                            , fontSize = 13.sp, color = PColors.Text
+                            )
+                        },
+                        onClick = {
+                            if (playback.abEndMs < 0) container.playback.markB()
+                            else if (playback.abStartMs < 0) container.playback.markA()
+                            else container.playback.clearAb()
+                            menuOpen = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text("A-B：重设 A 点（当前位置）", fontSize = 13.sp, color = PColors.TextDim)
+                        },
+                        onClick = { container.playback.markA(); menuOpen = false }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (playback.sleepAtMs > 0L)
+                                    "定时关闭  剩 ${container.playback.remainingSleepMinutes()} 分"
+                                else "定时关闭",
+                                fontSize = 13.sp,
+                                color = if (playback.sleepAtMs > 0L) PColors.Accent else PColors.Text
+                            )
+                        },
+                        onClick = { menuOpen = false; onOpenSleep() }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 进度条行：当前时间 + 滑块 + 总时长。拖动中按本地值显示，松手才真正 seek。 */
+@Composable
+private fun ProgressRow(container: AppContainer, playback: PlaybackUi) {
+    var scrubbing by remember { mutableStateOf(false) }
+    var scrubValue by remember { mutableStateOf(0f) }
+    val duration = playback.durationMs.coerceAtLeast(1)
+    val progress = if (scrubbing) scrubValue else playback.positionMs.toFloat() / duration
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(formatTime(if (scrubbing) (scrubValue * duration).toLong() else playback.positionMs),
+            color = PColors.TextDim, fontSize = 12.sp, modifier = Modifier.width(52.dp))
+        Slider(
+            value = progress.coerceIn(0f, 1f),
+            onValueChange = { scrubbing = true; scrubValue = it },
+            onValueChangeFinished = {
+                container.playback.seekTo((scrubValue * duration).toLong())
+                scrubbing = false
+            },
+            modifier = Modifier.weight(1f)
+        )
+        Text(formatTime(playback.durationMs), color = PColors.TextDim, fontSize = 12.sp,
+            textAlign = TextAlign.End, modifier = Modifier.width(52.dp))
+    }
+}
+
+/** 传输行：音量 / 上一首 / 快退 / 播放暂停 / 快进 / 下一首。 */
+@Composable
+private fun TransportRow(container: AppContainer, playback: PlaybackUi) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        IconButton(onClick = {}) { Icon(Icons.Rounded.VolumeUp, null, tint = PColors.TextWeak) }
+        IconButton(onClick = { container.playback.prev() }) {
+            Icon(Icons.Rounded.SkipPrevious, null, tint = PColors.Text, modifier = Modifier.size(30.dp))
+        }
+        IconButton(onClick = { container.playback.seekRelative(-10_000) }) {
+            Icon(Icons.Rounded.FastRewind, null, tint = PColors.TextWeak)
+        }
+        IconButton(onClick = {
+            if (!playback.ready) container.playback.connect() else container.playback.toggle()
+        }) {
+            Icon(
+                if (playback.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = null, tint = PColors.Text, modifier = Modifier.size(44.dp)
+            )
+        }
+        IconButton(onClick = { container.playback.seekRelative(10_000) }) {
+            Icon(Icons.Rounded.FastForward, null, tint = PColors.TextWeak)
+        }
+        IconButton(onClick = { container.playback.next() }) {
+            Icon(Icons.Rounded.SkipNext, null, tint = PColors.Text, modifier = Modifier.size(30.dp))
+        }
+        // 多轨编辑器入口统一放在屏幕右上角的同一个按钮上（CyrilRoot 内）
+        Spacer(Modifier.size(44.dp))
     }
 }
 

@@ -1,5 +1,6 @@
 package com.multitrack.app.player.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -79,6 +80,9 @@ fun LibraryScreen(
 
     // 歌单已经并进资料库：这里既是入口，也承接「新建歌单并加入」的命名
     var pane by remember { mutableStateOf(LibPane.LIST) }
+    // 系统返回键：歌手/专辑/歌单/设置这些二级页先回到歌曲列表，别一按就退出应用。
+    // 各二级页内部还有自己的下钻（opened 详情页），它们的 BackHandler 注册得更晚、优先级更高，会先被消费。
+    BackHandler(enabled = pane != LibPane.LIST) { pane = LibPane.LIST }
     var namingPlaylist by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
     val playlists by container.db.playlistDao().observeAll().collectAsState(emptyList())

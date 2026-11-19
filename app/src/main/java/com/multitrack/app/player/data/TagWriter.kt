@@ -34,7 +34,15 @@ class TagWriter(private val context: Context) {
         val lyrics: String? = null
     )
 
-    suspend fun write(song: SongEntity, edits: Edits): Result<Unit> = withContext(Dispatchers.IO) {
+    /**
+     * 写回标签。
+     * 返回 Result.success(note)：note 为 null 表示全部写入成功；
+     * 非 null 是一条**部分成功**的说明 —— 最常见的是该格式的标签不支持内嵌封面
+     * （jaudiotagger 对 GenericTag / ID3v1 等调 setField(artwork) 会直接抛
+     * "Not implemented for this format"）。此时文字标签照常写盘，
+     * 封面由调用方落成应用内封面（covers/<id>.jpg，显示优先于内嵌）。
+     */
+    suspend fun write(song: SongEntity, edits: Edits): Result<String?> = withContext(Dispatchers.IO) {
         runCatching {
             val uri = Uri.parse(song.uri)
             // jaudiotagger 是按扩展名选 Reader 的：之前用 .tmp，直接报
@@ -62,6 +70,8 @@ class TagWriter(private val context: Context) {
             edits.disc?.let { if (it > 0) tag.setField(FieldKey.DISC_NO, it.toString()) }
             edits.lyrics?.let { runCatching { tag.setField(FieldKey.LYRICS, it) } }
 
+            var coverNote: String? = null
+            var coverEmbedded = false
             edits.cover?.let { coverUri ->
                 // 不用 ArtworkFactory.createArtworkFromFile：它按 TagOptionSingleton.isAndroid()
                 // 选实现，一旦落到 StandardArtwork 就会调 javax.imageio.ImageIO —— Android 上没有
@@ -89,15 +99,31 @@ class TagWriter(private val context: Context) {
                     bmp.recycle()
                     bos.toByteArray()
                 }
-                runCatching { tag.deleteArtworkField() }
-                val art = ArtworkFactory.getNew()
-                art.binaryData = jpeg
-                art.mimeType = "image/jpeg"
-                art.pictureType = 3 // APIC：Front Cover
-                tag.setField(art)
+                try {
+                    runCatching { tag.deleteArtworkField() }
+                    val art = ArtworkFactory.getNew()
+                    art.binaryData = jpeg
+                    art.mimeType = "image/jpeg"
+                    art.pictureType = 3 // APIC：Front Cover
+                    tag.setField(art)
+                    coverEmbedded = true
+                } catch (e: Exception) {
+                    // 该格式的标签不支持内嵌（GenericTag / ID3v1 …）：文字标签别跟着陪葬，
+                    // 封面走应用内封面的路子（调用方 setCustomCover 落盘，显示优先于内嵌）
+                    coverNote = "封面未能写进文件（此格式不支持内嵌封面），已保存为应用内封面"
+                }
             }
 
-            audio.commit()
+            try {
+                audio.commit()
+            } catch (e: Exception) {
+                if (!coverEmbedded) throw e
+                // 带着封面 commit 失败（个别格式写容器时不认新封面原子）：
+                // 摘掉封面重试一次，保住文字标签
+                runCatching { tag.deleteArtworkField() }
+                audio.commit()
+                coverNote = "封面未能写进文件（此格式写入封面失败），已保存为应用内封面"
+            }
 
             context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
                 tmp.inputStream().use { it.copyTo(out) }
@@ -105,22 +131,74 @@ class TagWriter(private val context: Context) {
 
             tmp.delete()
 
-            // 让系统媒体库也跟着更新（否则相册/文件管理器里还是旧标签）
+            // ── 回读验证：改完必须回读文件本体确认，不能嘴上说成功 ──
+            // 文件改没改成只有文件自己知道：写流程任何一环出问题（权限、容器、磁盘），
+            // 之前都会被包装成「已写入」，重启重扫后用户才发现标签复原。
+            val notes = ArrayList<String>()
+            val textEdits = listOfNotNull(
+                edits.title?.let { "标题" to it },
+                edits.artist?.let { "歌手" to it },
+                edits.album?.let { "专辑" to it },
+                edits.albumArtist?.let { "专辑艺术家" to it },
+                edits.genre?.let { "流派" to it }
+            )
+            if (textEdits.isNotEmpty()) {
+                val vt = readBackTags(song, uri, ext)
+                when {
+                    vt == null -> notes.add("文件已写入（本机不允许回读验证）")
+                    else -> {
+                        val bad = mutableListOf<String>()
+                        if (edits.title != null && vt.title != edits.title) bad.add("标题")
+                        if (edits.artist != null && vt.artist != edits.artist) bad.add("歌手")
+                        if (edits.album != null && vt.album != edits.album) bad.add("专辑")
+                        if (edits.albumArtist != null && vt.albumArtist != edits.albumArtist) bad.add("专辑艺术家")
+                        if (edits.genre != null && vt.genre != edits.genre) bad.add("流派")
+                        if (bad.isNotEmpty()) {
+                            error("写入未生效，文件内容没有变化（${bad.joinToString("、")}被存储位置拒绝改写）")
+                        }
+                    }
+                }
+            }
+
+            // 让系统媒体库的列也跟上（否则相册/文件管理器里还是旧标签）。
+            // GENRE 列是 Android 11（API 30）才加进 Audio.Media 的，低版本写了必抛。
             runCatching {
                 val values = ContentValues().apply {
                     edits.title?.let { put(MediaStore.Audio.Media.TITLE, it) }
                     edits.artist?.let { put(MediaStore.Audio.Media.ARTIST, it) }
                     edits.album?.let { put(MediaStore.Audio.Media.ALBUM, it) }
-                    edits.genre?.let { put(MediaStore.Audio.Media.GENRE, it) }
+                    if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        edits.genre?.let { put(MediaStore.Audio.Media.GENRE, it) }
+                    }
                     edits.year?.let { put(MediaStore.Audio.Media.YEAR, it) }
                     edits.track?.let { put(MediaStore.Audio.Media.TRACK, it) }
                 }
                 if (values.size() > 0) context.contentResolver.update(uri, values, null, null)
+            }.onFailure {
+                notes.add("系统媒体库列未同步（${it.message ?: it.javaClass.simpleName}），已请求重扫")
             }
             runCatching {
                 MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
             }
-            Unit
+
+            coverNote?.let { notes.add(it) }
+            notes.joinToString("；").ifEmpty { null }
         }
+    }
+
+    /**
+     * 回读文件里的真实标签。Android 11+ 允许带音频读权限直接按路径读媒体文件；
+     * Android 10 不允许路径访问，就复制一份再读 —— 都失败就返回 null（无法验证）。
+     */
+    private fun readBackTags(song: SongEntity, uri: Uri, ext: String): FileTags.Tags? {
+        FileTags.read(song.path)?.let { return it }
+        val tmp = File(context.cacheDir, "tag_verify_${song.id}.$ext")
+        return runCatching {
+            if (tmp.exists()) tmp.delete()
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { input.copyTo(it) }
+            } ?: return null
+            FileTags.read(tmp.absolutePath)
+        }.getOrNull().also { tmp.delete() }
     }
 }

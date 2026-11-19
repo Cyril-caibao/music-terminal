@@ -113,6 +113,15 @@ fun PlayerApp(container: AppContainer) {
             battAsk = true
         }
 
+        // 冷启动恢复：打开应用回到上一次播放的歌曲和进度（不自动出声）。
+        // 只恢复一次 —— 授权状态中途变化不重复激活；没有历史记录就静默跳过。
+        var restored by remember { mutableStateOf(false) }
+        LaunchedEffect(granted) {
+            if (!granted || restored) return@LaunchedEffect
+            restored = true
+            runCatching { container.playback.restoreLastIfAny() }
+        }
+
         // 一开播就再确认一次通知权限：启动时问过一次，用户当时点了「拒绝」的话
         // 之后就再没有机会了 —— 而通知栏那个播放器完全靠这条权限。
         val playbackUi by container.playback.state.collectAsState()
